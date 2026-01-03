@@ -20,7 +20,10 @@
       "Bash(./run_multithread_test.bat)",
       "Bash(ls:*)",
       "Bash(./scripts/build_openmp.bat)",
-      "Bash(./build/golomb_openmp.exe:*)"
+      "Bash(./build/golomb_openmp.exe:*)",
+      "Bash(make:*)",
+      "Bash(./scripts/build_mpi.bat)",
+      "Bash(mpiexec:*)"
     ],
     "deny": [],
     "ask": []

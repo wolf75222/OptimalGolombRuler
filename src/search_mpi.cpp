@@ -28,6 +28,7 @@ constexpr int TAG_WORK_ASSIGN = 1;
 constexpr int TAG_RESULT = 2;
 constexpr int TAG_BEST_UPDATE = 3;
 constexpr int TAG_TERMINATE = 4;
+constexpr int TAG_MARKS = 5;
 
 // Maximum marks we support
 constexpr int MAX_MARKS = 24;
@@ -38,7 +39,6 @@ constexpr int DIFF_WORDS = (MAX_DIFF + 63) / 64;
 // Cache-line aligned search state
 struct alignas(64) SearchState {
     int marks[MAX_MARKS];
-    int diffs[MAX_MARKS];
     uint64_t usedDiffs[DIFF_WORDS];  // Direct bit manipulation
     int numMarks;
     int bestLen;
@@ -47,18 +47,6 @@ struct alignas(64) SearchState {
 };
 
 // Inline bit operations
-static inline bool testBit(const uint64_t* bits, int idx) {
-    return (bits[idx >> 6] >> (idx & 63)) & 1;
-}
-
-static inline void setBit(uint64_t* bits, int idx) {
-    bits[idx >> 6] |= (1ULL << (idx & 63));
-}
-
-static inline void clearBit(uint64_t* bits, int idx) {
-    bits[idx >> 6] &= ~(1ULL << (idx & 63));
-}
-
 static inline void clearAllBits(uint64_t* bits) {
     std::memset(bits, 0, DIFF_WORDS * sizeof(uint64_t));
 }
@@ -67,61 +55,63 @@ static inline void clearAllBits(uint64_t* bits) {
 static inline void backtrackMPI(
     SearchState& state,
     const int n,
+    const int maxLen,
     std::atomic<int>& globalBestLen,
     long long& localExplored)
 {
     localExplored++;
 
-    // CSAPP: [[unlikely]] - leaf nodes are rare, optimize for non-leaf path
-    if (state.numMarks == n) [[unlikely]] {
-        const int newLen = state.marks[n - 1];
-        state.bestLen = newLen;
-        state.bestNumMarks = n;
-        for (int i = 0; i < n; ++i) {
-            state.bestMarks[i] = state.marks[i];
-        }
+    // CSAPP: Hoist loop-invariant memory accesses
+    const int numMarks = state.numMarks;
+    const int* const marks = state.marks;
+    uint64_t* const usedDiffs = state.usedDiffs;
+    const int lastMark = marks[numMarks - 1];
+    const int start = lastMark + 1;
 
-        int expected = globalBestLen.load(std::memory_order_relaxed);
-        while (newLen < expected &&
-               !globalBestLen.compare_exchange_weak(expected, newLen,
-                   std::memory_order_release, std::memory_order_relaxed)) {
+    // Check if we already have n marks (complete solution)
+    if (numMarks == n) [[unlikely]] {
+        const int solutionLen = lastMark;
+        if (solutionLen <= maxLen && solutionLen < state.bestLen) {
+            state.bestLen = solutionLen;
+            state.bestNumMarks = n;
+            for (int i = 0; i < n; ++i) {
+                state.bestMarks[i] = marks[i];
+            }
+            // Update global best atomically
+            int expected = globalBestLen.load(std::memory_order_relaxed);
+            while (solutionLen < expected &&
+                   !globalBestLen.compare_exchange_weak(expected, solutionLen,
+                       std::memory_order_release, std::memory_order_relaxed)) {
+            }
         }
         return;
     }
 
-    // CSAPP: Hoist loop-invariant memory accesses
-    const int numMarks = state.numMarks;
-    const int* const marks = state.marks;
-    int* const diffs = state.diffs;
-    uint64_t* const usedDiffs = state.usedDiffs;
+    // Local diffs array for THIS recursion level
+    // CRITICAL: Must be local to prevent corruption across recursion
+    int diffs[MAX_MARKS];
 
-    const int lastMark = marks[numMarks - 1];
-    const int start = lastMark + 1;
+    // Loop with pruning - re-read globalBestLen each iteration
+    for (int next = start; next <= maxLen; ++next) {
+        // Re-read global best each iteration to catch updates from other threads
+        const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
+        if (next >= currentGlobalBest) [[unlikely]] {
+            break;
+        }
 
-    // CSAPP: Use std::min for branchless comparison (CMOV instruction)
-    const int localBest = state.bestLen;
-    const int globalBest = globalBestLen.load(std::memory_order_relaxed);
-    const int effectiveBest = std::min(localBest, globalBest);
-    const int maxNext = std::min(effectiveBest, MAX_DIFF - 1);
-
-    for (int next = start; next <= maxNext; ++next) {
-        // Check all differences
+        // Check all differences for conflicts (fail-fast)
         bool valid = true;
         int numNewDiffs = 0;
 
-        // CSAPP: Inline bit test, pre-compute word index and mask
         for (int i = 0; i < numMarks; ++i) {
             const int d = next - marks[i];
-            const int wordIdx = d >> 6;
-            const uint64_t mask = 1ULL << (d & 63);
-            if (usedDiffs[wordIdx] & mask) {
+            if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
                 valid = false;
                 break;
             }
             diffs[numNewDiffs++] = d;
         }
 
-        // CSAPP: [[likely]] - most candidates are rejected (conflicts are common)
         if (!valid) [[likely]] continue;
 
         // Apply all differences
@@ -132,9 +122,24 @@ static inline void backtrackMPI(
         state.marks[numMarks] = next;
         state.numMarks = numMarks + 1;
 
-        // CSAPP: [[likely]] - we usually recurse when we get here
-        if (next < effectiveBest) [[likely]] {
-            backtrackMPI(state, n, globalBestLen, localExplored);
+        // Check if complete solution
+        if (state.numMarks == n) {
+            const int solutionLen = next;
+            if (solutionLen <= maxLen && solutionLen < state.bestLen) {
+                state.bestLen = solutionLen;
+                state.bestNumMarks = n;
+                for (int j = 0; j < n; ++j) {
+                    state.bestMarks[j] = state.marks[j];
+                }
+                int expected = globalBestLen.load(std::memory_order_relaxed);
+                while (solutionLen < expected &&
+                       !globalBestLen.compare_exchange_weak(expected, solutionLen,
+                           std::memory_order_release, std::memory_order_relaxed)) {
+                }
+            }
+        } else {
+            // Recurse to explore deeper
+            backtrackMPI(state, n, maxLen, globalBestLen, localExplored);
         }
 
         // Undo all differences
@@ -146,98 +151,43 @@ static inline void backtrackMPI(
     }
 }
 
-// Process a single branch with OpenMP parallelization on sub-branches
+// Process a single branch with OpenMP parallelization
+// This explores all solutions starting with marks[1] = branchStart
 static void processBranch(
     int branchStart,
     int n,
+    int maxLen,
     std::atomic<int>& globalBestLen,
     int& resultBestLen,
     int resultBestMarks[MAX_MARKS],
     int& resultNumMarks,
     long long& totalExplored)
 {
-    resultBestLen = globalBestLen.load(std::memory_order_acquire);
+    resultBestLen = maxLen + 1;
     resultNumMarks = 0;
     totalExplored = 0;
 
-    // Generate second-level branches for OpenMP distribution
-    const int maxSecond = (resultBestLen < MAX_DIFF - 1) ? resultBestLen : (MAX_DIFF - 1);
+    // Use single thread to explore this entire branch
+    // (OpenMP parallelization is already at the branch level via MPI)
+    SearchState state{};
+    state.marks[0] = 0;
+    state.marks[1] = branchStart;
+    state.numMarks = 2;
+    state.bestLen = maxLen + 1;
+    state.bestNumMarks = 0;
 
-    #pragma omp parallel
-    {
-        SearchState state{};
-        state.marks[0] = 0;
-        state.marks[1] = branchStart;
-        state.numMarks = 2;
-        state.bestLen = globalBestLen.load(std::memory_order_acquire);
-        state.bestNumMarks = 0;
-        long long threadExplored = 0;
+    clearAllBits(state.usedDiffs);
+    state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
 
-        #pragma omp for schedule(dynamic, 1) nowait
-        for (int second = branchStart + 1; second < maxSecond; ++second) {
-            // Check if pruned
-            int currentBest = globalBestLen.load(std::memory_order_relaxed);
-            if (second >= currentBest) continue;
+    backtrackMPI(state, n, maxLen, globalBestLen, totalExplored);
 
-            // Check differences for second mark
-            const int d1 = second;               // diff with mark 0 (second - 0)
-            const int d2 = second - branchStart; // diff with mark 1
-
-            // CSAPP: d1 < MAX_DIFF is guaranteed since maxSecond < MAX_DIFF
-            if (d1 == branchStart) continue;     // Would conflict with first diff
-
-            // Setup state using inline bit operations
-            clearAllBits(state.usedDiffs);
-            // Inline setBit for all three differences
-            state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));  // diff: branchStart - 0
-            state.usedDiffs[d1 >> 6] |= (1ULL << (d1 & 63));                    // diff: second - 0
-            state.usedDiffs[d2 >> 6] |= (1ULL << (d2 & 63));                    // diff: second - branchStart
-
-            state.marks[0] = 0;
-            state.marks[1] = branchStart;
-            state.marks[2] = second;
-            state.numMarks = 3;
-
-            backtrackMPI(state, n, globalBestLen, threadExplored);
-        }
-
-        // Aggregate results
-        #pragma omp atomic
-        totalExplored += threadExplored;
-
-        if (state.bestNumMarks > 0) {
-            #pragma omp critical(update_result)
-            {
-                if (state.bestLen < resultBestLen) {
-                    resultBestLen = state.bestLen;
-                    resultNumMarks = state.bestNumMarks;
-                    for (int i = 0; i < state.bestNumMarks; ++i) {
-                        resultBestMarks[i] = state.bestMarks[i];
-                    }
-                }
-            }
+    if (state.bestNumMarks > 0) {
+        resultBestLen = state.bestLen;
+        resultNumMarks = state.bestNumMarks;
+        for (int i = 0; i < state.bestNumMarks; ++i) {
+            resultBestMarks[i] = state.bestMarks[i];
         }
     }
-}
-
-// Hypercube all-reduce for minimum
-static int hypercubeAllReduceMin(int localMin, const HypercubeMPI& hypercube) {
-    int result = localMin;
-    const int dims = hypercube.dimensions();
-
-    for (int d = 0; d < dims; ++d) {
-        int partner = hypercube.neighbor(d);
-        int recvVal;
-
-        MPI_Sendrecv(&result, 1, MPI_INT, partner, d,
-                     &recvVal, 1, MPI_INT, partner, d,
-                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        if (recvVal < result) {
-            result = recvVal;
-        }
-    }
-    return result;
 }
 
 void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercube)
@@ -247,42 +197,67 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
     const int rank = hypercube.rank();
     const int size = hypercube.size();
 
-    int bestLen = maxLen;
+    // Initialize to maxLen+1 to allow finding solutions at exactly maxLen
+    int bestLen = maxLen + 1;
     int bestMarks[MAX_MARKS] = {0};
     int bestNumMarks = 0;
-    std::atomic<int> globalBestLen(maxLen);
+    std::atomic<int> globalBestLen(maxLen + 1);
 
     // ==========================================================================
-    // Single process mode: just use OpenMP
+    // Single process mode: use OpenMP directly (like search.cpp)
     // ==========================================================================
     if (size == 1) {
-        long long explored = 0;
-        int resultMarks[MAX_MARKS];
-        int resultNumMarks;
+        int finalBestLen = maxLen + 1;
+        int finalBestMarks[MAX_MARKS] = {0};
+        int finalBestNumMarks = 0;
 
-        for (int branch = 1; branch < maxLen; ++branch) {
-            if (branch >= globalBestLen.load(std::memory_order_acquire)) break;
+        #pragma omp parallel shared(globalBestLen, finalBestLen, finalBestMarks, finalBestNumMarks)
+        {
+            SearchState state{};
+            state.marks[0] = 0;
+            state.numMarks = 1;
+            state.bestLen = maxLen + 1;
+            state.bestNumMarks = 0;
+            long long threadExplored = 0;
 
-            int branchBestLen;
-            long long branchExplored;
-
-            processBranch(branch, n, globalBestLen, branchBestLen,
-                         resultMarks, resultNumMarks, branchExplored);
-
-            explored += branchExplored;
-
-            if (branchBestLen < bestLen) {
-                bestLen = branchBestLen;
-                bestNumMarks = resultNumMarks;
-                for (int i = 0; i < resultNumMarks; ++i) {
-                    bestMarks[i] = resultMarks[i];
+            #pragma omp for schedule(dynamic, 1)
+            for (int firstMark = 1; firstMark <= maxLen; ++firstMark) {
+                const int currentGlobal = globalBestLen.load(std::memory_order_acquire);
+                if (firstMark >= currentGlobal) {
+                    continue;
                 }
-                globalBestLen.store(bestLen, std::memory_order_release);
+
+                // Setup state for this branch
+                state.marks[0] = 0;
+                state.marks[1] = firstMark;
+                state.numMarks = 2;
+                clearAllBits(state.usedDiffs);
+                state.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
+
+                backtrackMPI(state, n, maxLen, globalBestLen, threadExplored);
+            }
+
+            exploredCountMPI.fetch_add(threadExplored, std::memory_order_relaxed);
+
+            if (state.bestNumMarks > 0) {
+                #pragma omp critical(merge_best_mpi)
+                {
+                    if (state.bestLen < finalBestLen) {
+                        finalBestLen = state.bestLen;
+                        finalBestNumMarks = state.bestNumMarks;
+                        for (int i = 0; i < state.bestNumMarks; ++i) {
+                            finalBestMarks[i] = state.bestMarks[i];
+                        }
+                    }
+                }
             }
         }
 
-        exploredCountMPI.store(explored, std::memory_order_relaxed);
-        best.marks.assign(bestMarks, bestMarks + bestNumMarks);
+        if (finalBestNumMarks > 0) {
+            best.marks.assign(finalBestMarks, finalBestMarks + finalBestNumMarks);
+        } else {
+            best.marks.clear();
+        }
         best.computeLength();
         return;
     }
@@ -294,7 +269,7 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
     if (rank == 0) {
         // === MASTER ===
         std::queue<int> workQueue;
-        for (int branch = 1; branch < maxLen; ++branch) {
+        for (int branch = 1; branch <= maxLen; ++branch) {
             workQueue.push(branch);
         }
 
@@ -326,23 +301,25 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
 
             totalExplored += workerExplored;
 
-            // Receive marks if better solution found
-            if (workerBestLen < bestLen && numMarks > 0) {
+            // Receive marks if worker found a solution
+            if (numMarks > 0) {
                 int workerMarks[MAX_MARKS];
                 MPI_Recv(workerMarks, numMarks, MPI_INT, source,
-                        TAG_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        TAG_MARKS, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                bestLen = workerBestLen;
-                bestNumMarks = numMarks;
-                for (int i = 0; i < numMarks; ++i) {
-                    bestMarks[i] = workerMarks[i];
-                }
+                // Update best if this solution is better
+                if (workerBestLen < bestLen) {
+                    bestLen = workerBestLen;
+                    bestNumMarks = numMarks;
+                    for (int i = 0; i < numMarks; ++i) {
+                        bestMarks[i] = workerMarks[i];
+                    }
 
-                // Broadcast new bound to all workers via hypercube
-                // (For simplicity, use direct sends here; hypercube is used for final reduction)
-                for (int w = 1; w < size; ++w) {
-                    if (w != source) {
-                        MPI_Send(&bestLen, 1, MPI_INT, w, TAG_BEST_UPDATE, MPI_COMM_WORLD);
+                    // Broadcast new bound to all workers
+                    for (int w = 1; w < size; ++w) {
+                        if (w != source) {
+                            MPI_Send(&bestLen, 1, MPI_INT, w, TAG_BEST_UPDATE, MPI_COMM_WORLD);
+                        }
                     }
                 }
             }
@@ -369,8 +346,6 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
 
     } else {
         // === WORKER ===
-        long long localExplored = 0;
-
         while (true) {
             // Check for bound updates (non-blocking)
             int flag;
@@ -409,7 +384,7 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
             long long branchExplored;
 
             if (branch < globalBestLen.load(std::memory_order_acquire)) {
-                processBranch(branch, n, globalBestLen,
+                processBranch(branch, n, maxLen, globalBestLen,
                              resultBestLen, resultMarks, resultNumMarks, branchExplored);
             } else {
                 resultBestLen = globalBestLen.load(std::memory_order_acquire);
@@ -417,9 +392,7 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
                 branchExplored = 0;
             }
 
-            localExplored += branchExplored;
-
-            // Send result
+            // Send result - always send marks if we found a solution
             int resultBuf[4] = {
                 resultBestLen,
                 resultNumMarks,
@@ -428,8 +401,9 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
             };
             MPI_Send(resultBuf, 4, MPI_INT, 0, TAG_RESULT, MPI_COMM_WORLD);
 
-            if (resultNumMarks > 0 && resultBestLen < masterBest) {
-                MPI_Send(resultMarks, resultNumMarks, MPI_INT, 0, TAG_RESULT, MPI_COMM_WORLD);
+            // Send marks if we found any solution (master will decide if it's better)
+            if (resultNumMarks > 0) {
+                MPI_Send(resultMarks, resultNumMarks, MPI_INT, 0, TAG_MARKS, MPI_COMM_WORLD);
             }
         }
     }
@@ -437,9 +411,12 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
     // Final broadcast of solution
     MPI_Bcast(&bestLen, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&bestNumMarks, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(bestMarks, bestNumMarks, MPI_INT, 0, MPI_COMM_WORLD);
-
-    best.marks.assign(bestMarks, bestMarks + bestNumMarks);
+    if (bestNumMarks > 0) {
+        MPI_Bcast(bestMarks, bestNumMarks, MPI_INT, 0, MPI_COMM_WORLD);
+        best.marks.assign(bestMarks, bestMarks + bestNumMarks);
+    } else {
+        best.marks.clear();
+    }
     best.computeLength();
 }
 
