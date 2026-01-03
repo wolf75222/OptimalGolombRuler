@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(msbuild:*)",
+      "Bash(where cl)",
+      "Bash(./x64/Release/OptimalGolombRuler.exe)",
+      "Bash(build_mpi.bat)",
+      "Bash(cmd:*)",
+      "Bash(g++:*)",
+      "Bash(mpicxx:*)",
+      "Bash(where mpiexec)",
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\\\Program Files\\\\Microsoft MPI''\")",
+      "Bash(powershell:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

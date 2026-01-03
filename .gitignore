@@ -1,0 +1,33 @@
+# Build output
+build/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.*
+*.slnx
+*.sln
+*.suo
+*.user
+OptimalG.7071d12c/
+x64/
+
+# IDE
+.idea/
+
+# Temp files
+*.log
+*.tmp
+*_err.txt
+*_out.txt
+
+# OS
+.DS_Store
+Thumbs.db

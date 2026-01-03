@@ -1,0 +1,63 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build OpenMP (MSVC)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/build_openmp.bat",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Build OpenMP version with MSVC"
+        },
+        {
+            "label": "Build MPI (MSVC)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/build_mpi.bat",
+            "group": "build",
+            "problemMatcher": "$msCompile",
+            "detail": "Build MPI+OpenMP version with MSVC"
+        },
+        {
+            "label": "Build OpenMP (g++)",
+            "type": "shell",
+            "command": "make openmp",
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "detail": "Build OpenMP version with g++"
+        },
+        {
+            "label": "Build MPI (mpicxx)",
+            "type": "shell",
+            "command": "make mpi",
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "detail": "Build MPI version with mpicxx"
+        },
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/clean.bat",
+            "problemMatcher": [],
+            "detail": "Remove build artifacts"
+        },
+        {
+            "label": "Run OpenMP",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/golomb_openmp.exe",
+            "group": "test",
+            "problemMatcher": [],
+            "dependsOn": "Build OpenMP (MSVC)"
+        },
+        {
+            "label": "Run MPI (4 processes)",
+            "type": "shell",
+            "command": "mpiexec -n 4 ${workspaceFolder}/build/golomb_mpi.exe",
+            "group": "test",
+            "problemMatcher": [],
+            "dependsOn": "Build MPI (MSVC)"
+        }
+    ]
+}
