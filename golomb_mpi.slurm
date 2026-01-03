@@ -36,12 +36,11 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # Travail dans un répertoire scratch dédié
 WORK=/scratch_p/$USER/$SLURM_JOBID
-mkdir -p "$WORK"
-cd "$WORK"
+mkdir -p "$WORK/OptimalGolombRuler"
 
 # Copier les sources depuis le répertoire de soumission
-cp -r "$SLURM_SUBMIT_DIR/OptimalGolombRuler" .
-cd OptimalGolombRuler
+cp -r "$SLURM_SUBMIT_DIR"/* "$WORK/OptimalGolombRuler/"
+cd "$WORK/OptimalGolombRuler"
 
 echo "Building in: $(pwd)"
 # Build en mode PROD (sans -DDEV_MODE)
