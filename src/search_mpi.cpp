@@ -192,10 +192,18 @@ static void processBranch(
                 continue;
             }
 
-            // Check if secondMark creates valid differences
-            const int d1 = secondMark;           // diff with mark 0
-            const int d2 = secondMark - branchStart;  // diff with mark 1
-            if (d1 == d2 || d1 == branchStart || d2 == branchStart) {
+            // Compute differences for marks[2] = secondMark
+            // d1 = secondMark - 0 = secondMark (diff with mark 0)
+            // d2 = secondMark - branchStart (diff with mark 1)
+            // Existing diff: branchStart (from mark 1 - mark 0)
+            const int d1 = secondMark;
+            const int d2 = secondMark - branchStart;
+
+            // Check for conflicts: all three differences must be distinct
+            // d1 == branchStart means secondMark == branchStart (impossible since secondMark > branchStart)
+            // d2 == branchStart means secondMark == 2*branchStart
+            // d1 == d2 means secondMark == secondMark - branchStart (impossible unless branchStart == 0)
+            if (d2 == branchStart || d1 == d2) {
                 continue;  // Conflict with existing differences
             }
 
@@ -205,7 +213,7 @@ static void processBranch(
             state.marks[2] = secondMark;
             state.numMarks = 3;
             clearAllBits(state.usedDiffs);
-            // Set differences: branchStart, d1=secondMark, d2=secondMark-branchStart
+            // Set all three differences
             state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
             state.usedDiffs[d1 >> 6] |= (1ULL << (d1 & 63));
             state.usedDiffs[d2 >> 6] |= (1ULL << (d2 & 63));
@@ -438,6 +446,8 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
             if (branch < globalBestLen.load(std::memory_order_acquire)) {
                 processBranch(branch, n, maxLen, globalBestLen,
                              resultBestLen, resultMarks, resultNumMarks, branchExplored);
+                // Track explored states for this worker
+                exploredCountMPI.fetch_add(branchExplored, std::memory_order_relaxed);
             } else {
                 resultBestLen = globalBestLen.load(std::memory_order_acquire);
                 resultNumMarks = 0;
