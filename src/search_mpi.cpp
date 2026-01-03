@@ -375,10 +375,14 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
                         bestMarks[i] = workerMarks[i];
                     }
 
-                    // Broadcast new bound to all workers
+                    // Broadcast new bound to all workers using non-blocking sends
+                    // Allows master to continue processing while messages are in flight
                     for (int w = 1; w < size; ++w) {
                         if (w != source) {
-                            MPI_Send(&bestLen, 1, MPI_INT, w, TAG_BEST_UPDATE, MPI_COMM_WORLD);
+                            MPI_Request req;
+                            MPI_Isend(&bestLen, 1, MPI_INT, w, TAG_BEST_UPDATE,
+                                     MPI_COMM_WORLD, &req);
+                            MPI_Request_free(&req);  // Fire-and-forget
                         }
                     }
                 }
@@ -406,20 +410,46 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
 
     } else {
         // === WORKER ===
+        // Hypercube neighbors for bound relay
+        const int dim = hypercube.dimensions();
+
         while (true) {
-            // Check for bound updates (non-blocking)
+            // Check for bound updates from ANY source (hypercube relay)
             int flag;
-            MPI_Iprobe(0, TAG_BEST_UPDATE, MPI_COMM_WORLD, &flag, MPI_STATUS_IGNORE);
+            MPI_Iprobe(MPI_ANY_SOURCE, TAG_BEST_UPDATE, MPI_COMM_WORLD, &flag, MPI_STATUS_IGNORE);
             while (flag) {
+                MPI_Status updateStatus;
                 int newBest;
-                MPI_Recv(&newBest, 1, MPI_INT, 0, TAG_BEST_UPDATE,
-                        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(&newBest, 1, MPI_INT, MPI_ANY_SOURCE, TAG_BEST_UPDATE,
+                        MPI_COMM_WORLD, &updateStatus);
 
+                int source = updateStatus.MPI_SOURCE;
+
+                // Update local bound if better
                 int expected = globalBestLen.load(std::memory_order_relaxed);
-                while (newBest < expected &&
-                       !globalBestLen.compare_exchange_weak(expected, newBest));
+                bool updated = false;
+                while (newBest < expected) {
+                    if (globalBestLen.compare_exchange_weak(expected, newBest)) {
+                        updated = true;
+                        break;
+                    }
+                }
 
-                MPI_Iprobe(0, TAG_BEST_UPDATE, MPI_COMM_WORLD, &flag, MPI_STATUS_IGNORE);
+                // Relay to hypercube neighbors (if we updated)
+                if (updated) {
+                    for (int d = 0; d < dim; ++d) {
+                        int neighbor = rank ^ (1 << d);  // XOR with 2^d
+                        // Don't send back to source, and only to valid workers
+                        if (neighbor != source && neighbor > 0 && neighbor < size) {
+                            MPI_Request req;
+                            MPI_Isend(&newBest, 1, MPI_INT, neighbor, TAG_BEST_UPDATE,
+                                     MPI_COMM_WORLD, &req);
+                            MPI_Request_free(&req);
+                        }
+                    }
+                }
+
+                MPI_Iprobe(MPI_ANY_SOURCE, TAG_BEST_UPDATE, MPI_COMM_WORLD, &flag, MPI_STATUS_IGNORE);
             }
 
             // Receive work
