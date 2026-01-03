@@ -16,16 +16,28 @@ BUILD_DIR   = build
 CXX         = g++
 MPICXX      = mpicxx
 
-# Flags
-CXXFLAGS_BASE = -std=c++20 -O3 -fopenmp -I$(INC_DIR) -Wall -Wextra -DNDEBUG
+# =============================================================================
+# PERFORMANCE FLAGS - Maximum optimization
+# =============================================================================
+# -O3              : Aggressive optimization
+# -march=native    : Optimize for current CPU architecture
+# -mtune=native    : Tune for current CPU
+# -ffast-math      : Fast floating point (not critical here)
+# -funroll-loops   : Unroll loops for better ILP
+# -flto            : Link-time optimization
+# -fno-exceptions  : Disable exceptions (not used)
+# -fomit-frame-pointer : Free up a register
+# =============================================================================
+
+OPTFLAGS = -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto
+CXXFLAGS_BASE = -std=c++20 $(OPTFLAGS) -fopenmp -I$(INC_DIR) -Wall -Wextra -DNDEBUG
 CXXFLAGS      = $(CXXFLAGS_BASE)
 CXXFLAGS_DEV  = $(CXXFLAGS_BASE) -DDEV_MODE
-LDFLAGS       = -fopenmp
+LDFLAGS       = -fopenmp $(OPTFLAGS) -flto
 
-# Sources
-SRCS_COMMON = $(SRC_DIR)/golomb.cpp
-SRCS_OPENMP = $(SRCS_COMMON) $(SRC_DIR)/search.cpp $(SRC_DIR)/main_openmp.cpp
-SRCS_MPI    = $(SRCS_COMMON) $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
+# Sources (golomb.cpp removed - all code is header-only or in search files)
+SRCS_OPENMP = $(SRC_DIR)/search.cpp $(SRC_DIR)/main_openmp.cpp
+SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
 
 # Objects
 OBJS_OPENMP = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS_OPENMP))

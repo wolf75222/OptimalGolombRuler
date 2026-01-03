@@ -10,7 +10,17 @@
       "Bash(mpicxx:*)",
       "Bash(where mpiexec)",
       "Bash(powershell -Command \"Get-ChildItem ''C:\\\\Program Files\\\\Microsoft MPI''\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(del \"c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\src\\\\golomb.cpp\")",
+      "Bash(del \"c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\configprod.txt\")",
+      "Bash(cd:*)",
+      "Bash(scriptsbuild_debug.bat)",
+      "Bash(c:UsersromaidevOptimalGolombRulerrun_multithread_test.bat)",
+      "Bash(cmd.exe /c \"echo test > c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\testfile.txt\")",
+      "Bash(./run_multithread_test.bat)",
+      "Bash(ls:*)",
+      "Bash(./scripts/build_openmp.bat)",
+      "Bash(./build/golomb_openmp.exe:*)"
     ],
     "deny": [],
     "ask": []

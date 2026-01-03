@@ -14,14 +14,14 @@ const std::string CHANGES = "";
 // DEV  : tailles réduites pour tests rapides sur Windows
 // PROD : configuration complète pour cluster HPC/Slurm
 #ifdef DEV_MODE
-    const std::vector<int> DEFAULT_SIZES = { 6, 7, 8 };
-    const int DEFAULT_MAX_LEN = 100;
-    const std::vector<int> DEFAULT_THREADS = { 1, 2 };
+    const std::vector<int> DEFAULT_SIZES = { 16 };  // n=16 pour benchmark rapide
+    const int DEFAULT_MAX_LEN = MAX_DIFF - 1;       // 255 - maximal search space
+    const std::vector<int> DEFAULT_THREADS = { 1 };
     const char* MODE_NAME = "DEV";
 #else
-    const std::vector<int> DEFAULT_SIZES = { 8, 9, 10, 11 };
+    const std::vector<int> DEFAULT_SIZES = { 10, 11, 12 };
     const int DEFAULT_MAX_LEN = 200;
-    const std::vector<int> DEFAULT_THREADS = { 1, 2, 4, 8, 12, 16, 20 };
+    const std::vector<int> DEFAULT_THREADS = { 1, 2, 4, 8, 16 };
     const char* MODE_NAME = "PROD";
 #endif
 
@@ -72,13 +72,17 @@ int main() {
             double efficiency = (speedup / t) * 100.0;
             long long states = getExploredCount();
 
+            // Verify solution is valid
+            bool valid = best.marks.empty() ? true : GolombRuler::isValid(best.marks);
+
             std::cout << std::setw(10) << t
                 << std::setw(10) << best.length
                 << std::setw(15) << std::fixed << std::setprecision(5) << time
                 << std::setw(15) << std::setprecision(2) << speedup
                 << std::setw(15) << std::setprecision(1) << efficiency
-                << std::setw(20) << states
-                << std::endl;
+                << std::setw(20) << states;
+            if (!valid) std::cout << " INVALID!";
+            std::cout << std::endl;
 
             // Log to CSV
             logger.logOpenMP(n, t, best.length, time, speedup, efficiency, states, CHANGES);

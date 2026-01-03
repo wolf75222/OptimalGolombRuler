@@ -41,14 +41,14 @@ if not exist "%MPI_INCLUDE%" (
 REM Create build directory
 if not exist build mkdir build
 
-REM Compile
+REM Compile with maximum optimization flags
 echo Compiling MPI+OpenMP version [%MODE_MSG%]...
-cl.exe /std:c++20 /O2 /openmp /EHsc /DNDEBUG %DEV_FLAG% ^
+cl.exe /std:c++20 /O2 /Oi /Ot /GL /openmp /EHsc /DNDEBUG %DEV_FLAG% ^
        /I"include" /I"%MPI_INCLUDE%" ^
-       src\golomb.cpp src\search_mpi.cpp src\main_mpi.cpp ^
+       src\search_mpi.cpp src\main_mpi.cpp ^
        /Fe:build\%EXE_NAME% ^
        /Fo:build\ ^
-       /link "%MPI_LIB%\msmpi.lib"
+       /link /LTCG "%MPI_LIB%\msmpi.lib"
 
 if %errorlevel% equ 0 (
     echo.

@@ -31,13 +31,14 @@ if defined VSDIR (
 REM Create build directory
 if not exist build mkdir build
 
-REM Compile
+REM Compile with maximum optimization flags
 echo Compiling OpenMP version [%MODE_MSG%]...
-cl.exe /std:c++20 /O2 /openmp /EHsc /DNDEBUG %DEV_FLAG% ^
+cl.exe /std:c++20 /O2 /Oi /Ot /GL /openmp /EHsc /DNDEBUG %DEV_FLAG% ^
        /I"include" ^
-       src\golomb.cpp src\search.cpp src\main_openmp.cpp ^
+       src\search.cpp src\main_openmp.cpp ^
        /Fe:build\%EXE_NAME% ^
-       /Fo:build\
+       /Fo:build\ ^
+       /link /LTCG
 
 if %errorlevel% equ 0 (
     echo.
