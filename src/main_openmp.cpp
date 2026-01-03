@@ -10,14 +10,30 @@
 // Modifier cette variable avant chaque run pour documenter les modifications
 const std::string CHANGES = "";
 
+// Configuration DEV vs PROD
+// DEV  : tailles réduites pour tests rapides sur Windows
+// PROD : configuration complète pour cluster HPC/Slurm
+#ifdef DEV_MODE
+    const std::vector<int> DEFAULT_SIZES = { 6, 7, 8 };
+    const int DEFAULT_MAX_LEN = 100;
+    const std::vector<int> DEFAULT_THREADS = { 1, 2 };
+    const char* MODE_NAME = "DEV";
+#else
+    const std::vector<int> DEFAULT_SIZES = { 8, 9, 10, 11 };
+    const int DEFAULT_MAX_LEN = 200;
+    const std::vector<int> DEFAULT_THREADS = { 1, 2, 4, 8, 12, 16, 20 };
+    const char* MODE_NAME = "PROD";
+#endif
+
 int main() {
     std::cout << "=== Optimal Golomb Ruler Benchmark (OpenMP) ===\n";
+    std::cout << "Mode: " << MODE_NAME << "\n";
 
-    std::vector<int> sizes = { 8, 9, 10, 11 };
-    const int maxLen = 200;
+    std::vector<int> sizes = DEFAULT_SIZES;
+    const int maxLen = DEFAULT_MAX_LEN;
 
     int maxThreads = omp_get_max_threads();
-    std::vector<int> threadsToTest = { 1, 2, 4, 8, 12, 16, 20 };
+    std::vector<int> threadsToTest = DEFAULT_THREADS;
 
     // Logger CSV
     BenchmarkLog logger("benchmarks", "openmp");

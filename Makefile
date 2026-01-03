@@ -1,5 +1,11 @@
 # Makefile for Optimal Golomb Ruler
 # Supports: OpenMP (g++) and MPI+OpenMP (mpicxx)
+#
+# Usage:
+#   make openmp          # Build OpenMP version (PROD mode)
+#   make mpi             # Build MPI version (PROD mode)
+#   make openmp-dev      # Build OpenMP version (DEV mode - reduced sizes)
+#   make mpi-dev         # Build MPI version (DEV mode - reduced sizes)
 
 # Directories
 SRC_DIR     = src
@@ -11,8 +17,10 @@ CXX         = g++
 MPICXX      = mpicxx
 
 # Flags
-CXXFLAGS    = -std=c++20 -O3 -fopenmp -I$(INC_DIR) -Wall -Wextra -DNDEBUG
-LDFLAGS     = -fopenmp
+CXXFLAGS_BASE = -std=c++20 -O3 -fopenmp -I$(INC_DIR) -Wall -Wextra -DNDEBUG
+CXXFLAGS      = $(CXXFLAGS_BASE)
+CXXFLAGS_DEV  = $(CXXFLAGS_BASE) -DDEV_MODE
+LDFLAGS       = -fopenmp
 
 # Sources
 SRCS_COMMON = $(SRC_DIR)/golomb.cpp
@@ -56,9 +64,35 @@ $(BUILD_DIR)/mpi_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 clean:
 	rm -rf $(BUILD_DIR)
 
+# ========== DEV mode targets (reduced sizes for Windows testing) ==========
+TARGET_OPENMP_DEV = $(BUILD_DIR)/golomb_openmp_dev
+TARGET_MPI_DEV    = $(BUILD_DIR)/golomb_mpi_dev
+
+OBJS_OPENMP_DEV = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/dev_%.o,$(SRCS_OPENMP))
+OBJS_MPI_DEV    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/dev_mpi_%.o,$(SRCS_MPI))
+
+openmp-dev: $(BUILD_DIR) $(TARGET_OPENMP_DEV)
+
+$(TARGET_OPENMP_DEV): $(OBJS_OPENMP_DEV)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/dev_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS_DEV) -c -o $@ $<
+
+mpi-dev: $(BUILD_DIR) $(TARGET_MPI_DEV)
+
+$(TARGET_MPI_DEV): $(OBJS_MPI_DEV)
+	$(MPICXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/dev_mpi_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(MPICXX) $(CXXFLAGS_DEV) -c -o $@ $<
+
 # Run targets
 run: $(TARGET_OPENMP)
 	./$(TARGET_OPENMP)
+
+run-dev: $(TARGET_OPENMP_DEV)
+	./$(TARGET_OPENMP_DEV)
 
 run_mpi_2: $(TARGET_MPI)
 	mpiexec -n 2 ./$(TARGET_MPI)
@@ -69,4 +103,7 @@ run_mpi_4: $(TARGET_MPI)
 run_mpi_8: $(TARGET_MPI)
 	mpiexec -n 8 ./$(TARGET_MPI)
 
-.PHONY: all openmp mpi clean run run_mpi_2 run_mpi_4 run_mpi_8
+run_mpi_dev_2: $(TARGET_MPI_DEV)
+	mpiexec -n 2 ./$(TARGET_MPI_DEV)
+
+.PHONY: all openmp mpi openmp-dev mpi-dev clean run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2

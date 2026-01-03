@@ -1,7 +1,20 @@
 @echo off
 REM Build script for MPI+OpenMP version (MSVC + MS-MPI)
+REM Usage:
+REM   build_mpi.bat        - Build PROD version (full benchmark)
+REM   build_mpi.bat dev    - Build DEV version (reduced sizes for quick testing)
 
 setlocal enabledelayedexpansion
+
+REM Check for DEV mode
+set "DEV_FLAG="
+set "EXE_NAME=golomb_mpi.exe"
+set "MODE_MSG=PROD"
+if /i "%1"=="dev" (
+    set "DEV_FLAG=/DDEV_MODE"
+    set "EXE_NAME=golomb_mpi_dev.exe"
+    set "MODE_MSG=DEV"
+)
 
 REM Try to find Visual Studio
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -29,21 +42,21 @@ REM Create build directory
 if not exist build mkdir build
 
 REM Compile
-echo Compiling MPI+OpenMP version...
-cl.exe /std:c++20 /O2 /openmp /EHsc /DNDEBUG ^
+echo Compiling MPI+OpenMP version [%MODE_MSG%]...
+cl.exe /std:c++20 /O2 /openmp /EHsc /DNDEBUG %DEV_FLAG% ^
        /I"include" /I"%MPI_INCLUDE%" ^
        src\golomb.cpp src\search_mpi.cpp src\main_mpi.cpp ^
-       /Fe:build\golomb_mpi.exe ^
+       /Fe:build\%EXE_NAME% ^
        /Fo:build\ ^
        /link "%MPI_LIB%\msmpi.lib"
 
 if %errorlevel% equ 0 (
     echo.
-    echo Build successful: build\golomb_mpi.exe
+    echo Build successful: build\%EXE_NAME% [%MODE_MSG% mode]
     echo.
     echo Run with:
-    echo   mpiexec -n 4 build\golomb_mpi.exe
-    echo   mpiexec -n 8 build\golomb_mpi.exe
+    echo   mpiexec -n 2 build\%EXE_NAME%
+    echo   mpiexec -n 4 build\%EXE_NAME%
 ) else (
     echo Build failed.
     exit /b 1
