@@ -153,6 +153,7 @@ static inline void backtrackMPI(
 
 // Process a single branch with OpenMP parallelization
 // This explores all solutions starting with marks[1] = branchStart
+// Now uses OpenMP to parallelize the exploration of second-level branches
 static void processBranch(
     int branchStart,
     int n,
@@ -167,25 +168,76 @@ static void processBranch(
     resultNumMarks = 0;
     totalExplored = 0;
 
-    // Use single thread to explore this entire branch
-    // (OpenMP parallelization is already at the branch level via MPI)
-    SearchState state{};
-    state.marks[0] = 0;
-    state.marks[1] = branchStart;
-    state.numMarks = 2;
-    state.bestLen = maxLen + 1;
-    state.bestNumMarks = 0;
+    // Thread-safe accumulators
+    int finalBestLen = maxLen + 1;
+    int finalBestMarks[MAX_MARKS] = {0};
+    int finalBestNumMarks = 0;
 
-    clearAllBits(state.usedDiffs);
-    state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
+    #pragma omp parallel shared(globalBestLen, finalBestLen, finalBestMarks, finalBestNumMarks)
+    {
+        SearchState state{};
+        state.marks[0] = 0;
+        state.marks[1] = branchStart;
+        state.numMarks = 2;
+        state.bestLen = maxLen + 1;
+        state.bestNumMarks = 0;
+        long long threadExplored = 0;
 
-    backtrackMPI(state, n, maxLen, globalBestLen, totalExplored);
+        // Parallelize over second mark positions (marks[2])
+        // Range: branchStart+1 to currentBest-1
+        #pragma omp for schedule(dynamic, 1) nowait
+        for (int secondMark = branchStart + 1; secondMark <= maxLen; ++secondMark) {
+            const int currentGlobal = globalBestLen.load(std::memory_order_acquire);
+            if (secondMark >= currentGlobal) {
+                continue;
+            }
 
-    if (state.bestNumMarks > 0) {
-        resultBestLen = state.bestLen;
-        resultNumMarks = state.bestNumMarks;
-        for (int i = 0; i < state.bestNumMarks; ++i) {
-            resultBestMarks[i] = state.bestMarks[i];
+            // Check if secondMark creates valid differences
+            const int d1 = secondMark;           // diff with mark 0
+            const int d2 = secondMark - branchStart;  // diff with mark 1
+            if (d1 == d2 || d1 == branchStart || d2 == branchStart) {
+                continue;  // Conflict with existing differences
+            }
+
+            // Setup state for this sub-branch
+            state.marks[0] = 0;
+            state.marks[1] = branchStart;
+            state.marks[2] = secondMark;
+            state.numMarks = 3;
+            clearAllBits(state.usedDiffs);
+            // Set differences: branchStart, d1=secondMark, d2=secondMark-branchStart
+            state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
+            state.usedDiffs[d1 >> 6] |= (1ULL << (d1 & 63));
+            state.usedDiffs[d2 >> 6] |= (1ULL << (d2 & 63));
+
+            backtrackMPI(state, n, maxLen, globalBestLen, threadExplored);
+        }
+
+        // Accumulate explored count
+        #pragma omp atomic
+        totalExplored += threadExplored;
+
+        // Merge best solution
+        if (state.bestNumMarks > 0) {
+            #pragma omp critical(merge_branch_best)
+            {
+                if (state.bestLen < finalBestLen) {
+                    finalBestLen = state.bestLen;
+                    finalBestNumMarks = state.bestNumMarks;
+                    for (int i = 0; i < state.bestNumMarks; ++i) {
+                        finalBestMarks[i] = state.bestMarks[i];
+                    }
+                }
+            }
+        }
+    }
+
+    // Copy results
+    if (finalBestNumMarks > 0) {
+        resultBestLen = finalBestLen;
+        resultNumMarks = finalBestNumMarks;
+        for (int i = 0; i < finalBestNumMarks; ++i) {
+            resultBestMarks[i] = finalBestMarks[i];
         }
     }
 }

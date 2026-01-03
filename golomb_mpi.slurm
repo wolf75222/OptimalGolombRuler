@@ -90,8 +90,11 @@ for config in "${CONFIGS[@]}"; do
     echo "-------------------------------------------"
 
     export OMP_NUM_THREADS=$OMP_THREADS
-    export OMP_PROC_BIND=close
+    # Spread threads across cores for better memory bandwidth
+    # (better for memory-bound applications like backtracking)
+    export OMP_PROC_BIND=spread
     export OMP_PLACES=cores
+    export OMP_STACKSIZE=8M
 
     # Lancer avec srun
     srun --ntasks=$MPI_PROCS --cpus-per-task=$OMP_THREADS ./build/golomb_mpi
