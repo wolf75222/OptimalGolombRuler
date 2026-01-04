@@ -23,7 +23,9 @@
       "Bash(./build/golomb_openmp.exe:*)",
       "Bash(make:*)",
       "Bash(./scripts/build_mpi.bat)",
-      "Bash(mpiexec:*)"
+      "Bash(mpiexec:*)",
+      "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_sequential.bat dev\")",
+      "Bash(cmd.exe /c \"c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\scripts\\\\build_sequential.bat dev\")"
     ],
     "deny": [],
     "ask": []

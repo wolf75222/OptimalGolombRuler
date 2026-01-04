@@ -1,11 +1,15 @@
 # Makefile for Optimal Golomb Ruler
-# Supports: OpenMP (g++) and MPI+OpenMP (mpicxx)
+# Supports: Sequential, OpenMP (g++) and MPI+OpenMP (mpicxx)
 #
 # Usage:
+#   make sequential      # Build Sequential version (PROD mode)
+#   make sequential-dev  # Build Sequential version (DEV mode)
 #   make openmp          # Build OpenMP version (PROD mode)
 #   make mpi             # Build MPI version (PROD mode)
 #   make openmp-dev      # Build OpenMP version (DEV mode - reduced sizes)
 #   make mpi-dev         # Build MPI version (DEV mode - reduced sizes)
+#   make test            # Run correctness tests
+#   make bench           # Run full benchmark
 
 # Directories
 SRC_DIR     = src
@@ -36,23 +40,42 @@ CXXFLAGS_DEV  = $(CXXFLAGS_BASE) -DDEV_MODE
 LDFLAGS       = -fopenmp $(OPTFLAGS) -flto
 
 # Sources (golomb.cpp removed - all code is header-only or in search files)
+SRCS_SEQ    = $(SRC_DIR)/search_sequential.cpp $(SRC_DIR)/main_sequential.cpp
 SRCS_OPENMP = $(SRC_DIR)/search.cpp $(SRC_DIR)/main_openmp.cpp
 SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
 
 # Objects
+OBJS_SEQ    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq_%.o,$(SRCS_SEQ))
 OBJS_OPENMP = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS_OPENMP))
 OBJS_MPI    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi_%.o,$(SRCS_MPI))
 
 # Targets
+TARGET_SEQ    = $(BUILD_DIR)/golomb_sequential
 TARGET_OPENMP = $(BUILD_DIR)/golomb_openmp
 TARGET_MPI    = $(BUILD_DIR)/golomb_mpi
 
 # Default target
-all: openmp
+all: sequential openmp
 
 # Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+# =============================================================================
+# SEQUENTIAL TARGET (no OpenMP dependency for pure sequential)
+# =============================================================================
+# Note: We still use -fopenmp in CXXFLAGS for compatibility,
+#       but the sequential code doesn't use any OpenMP constructs
+CXXFLAGS_SEQ = -std=c++20 $(OPTFLAGS) -I$(INC_DIR) -Wall -Wextra -DNDEBUG
+LDFLAGS_SEQ  = $(OPTFLAGS) -flto
+
+sequential: $(BUILD_DIR) $(TARGET_SEQ)
+
+$(TARGET_SEQ): $(OBJS_SEQ)
+	$(CXX) $(LDFLAGS_SEQ) -o $@ $^
+
+$(BUILD_DIR)/seq_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS_SEQ) -c -o $@ $<
 
 # OpenMP target
 openmp: $(BUILD_DIR) $(TARGET_OPENMP)
@@ -76,12 +99,24 @@ $(BUILD_DIR)/mpi_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 clean:
 	rm -rf $(BUILD_DIR)
 
-# ========== DEV mode targets (reduced sizes for Windows testing) ==========
+# ========== DEV mode targets (reduced sizes for quick testing) ==========
+TARGET_SEQ_DEV    = $(BUILD_DIR)/golomb_sequential_dev
 TARGET_OPENMP_DEV = $(BUILD_DIR)/golomb_openmp_dev
 TARGET_MPI_DEV    = $(BUILD_DIR)/golomb_mpi_dev
 
+OBJS_SEQ_DEV    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/dev_seq_%.o,$(SRCS_SEQ))
 OBJS_OPENMP_DEV = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/dev_%.o,$(SRCS_OPENMP))
 OBJS_MPI_DEV    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/dev_mpi_%.o,$(SRCS_MPI))
+
+CXXFLAGS_SEQ_DEV = -std=c++20 $(OPTFLAGS) -I$(INC_DIR) -Wall -Wextra -DNDEBUG -DDEV_MODE
+
+sequential-dev: $(BUILD_DIR) $(TARGET_SEQ_DEV)
+
+$(TARGET_SEQ_DEV): $(OBJS_SEQ_DEV)
+	$(CXX) $(LDFLAGS_SEQ) -o $@ $^
+
+$(BUILD_DIR)/dev_seq_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS_SEQ_DEV) -c -o $@ $<
 
 openmp-dev: $(BUILD_DIR) $(TARGET_OPENMP_DEV)
 
@@ -118,4 +153,21 @@ run_mpi_8: $(TARGET_MPI)
 run_mpi_dev_2: $(TARGET_MPI_DEV)
 	mpiexec -n 2 ./$(TARGET_MPI_DEV)
 
-.PHONY: all openmp mpi openmp-dev mpi-dev clean run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2
+# =============================================================================
+# TESTING AND BENCHMARKING
+# =============================================================================
+test: sequential-dev
+	./$(TARGET_SEQ_DEV)
+
+bench: sequential
+	./$(TARGET_SEQ)
+
+run-seq: $(TARGET_SEQ)
+	./$(TARGET_SEQ)
+
+run-seq-dev: $(TARGET_SEQ_DEV)
+	./$(TARGET_SEQ_DEV)
+
+.PHONY: all sequential sequential-dev openmp mpi openmp-dev mpi-dev clean \
+        run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2 \
+        test bench run-seq run-seq-dev
