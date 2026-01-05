@@ -26,7 +26,7 @@ struct GolombRuler {
         return true;
     }
 
-    constexpr void computeLength() noexcept {
+    void computeLength() noexcept {
         length = marks.empty() ? 0 : marks.back();
     }
 

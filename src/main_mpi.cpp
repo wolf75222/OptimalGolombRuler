@@ -9,7 +9,7 @@
 
 // Description des changements pour ce benchmark
 // Modifier cette variable avant chaque run pour documenter les modifications
-const std::string CHANGES = "Master-worker dynamique + OpenMP taskloop";
+const std::string CHANGES = "Symmetric hypercube with periodic allReduceMin O(log P)";
 
 // Configuration DEV vs PROD
 // DEV  : tailles réduites pour tests rapides sur Windows

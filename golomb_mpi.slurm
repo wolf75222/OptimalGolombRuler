@@ -112,15 +112,26 @@ echo "-------------------------------------------"
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "2. OPENMP BENCHMARK (n=12, 192 threads)"
+echo "2. OPENMP BENCHMARK (n=12)"
 echo "=========================================="
 
-export OMP_NUM_THREADS=192
 export OMP_PROC_BIND=spread
 export OMP_PLACES=cores
 export OMP_STACKSIZE=8M
 
-time ./build/golomb_openmp
+# Test avec 32 threads
+echo ""
+echo ">>> OpenMP with 32 threads"
+echo "-------------------------------------------"
+export OMP_NUM_THREADS=32
+time ./build/golomb_openmp 12
+
+# Test avec 192 threads
+echo ""
+echo ">>> OpenMP with 192 threads"
+echo "-------------------------------------------"
+export OMP_NUM_THREADS=192
+time ./build/golomb_openmp 12
 
 echo "-------------------------------------------"
 

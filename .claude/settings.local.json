@@ -30,7 +30,12 @@
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && call scripts\\\\build_sequential.bat dev 2>&1\")",
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_sequential.bat dev 2>&1\")",
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && if exist build\\\\golomb_sequential.exe \\(echo Build exists\\) else \\(echo Build missing\\)\")",
-      "Bash(c:UsersromaidevOptimalGolombRulerbuildgolomb_sequential.exe 5)"
+      "Bash(c:UsersromaidevOptimalGolombRulerbuildgolomb_sequential.exe 5)",
+      "Bash(scriptsbuild_mpi.bat dev)",
+      "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_mpi.bat dev 2>&1\")",
+      "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && call scripts\\\\build_mpi.bat dev 2>&1\")",
+      "Bash(cmd.exe /c \"where cl.exe 2>&1\")",
+      "Bash(cmd.exe /c:*)"
     ],
     "deny": [],
     "ask": []

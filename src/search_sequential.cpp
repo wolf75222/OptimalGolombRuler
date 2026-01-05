@@ -98,7 +98,7 @@ struct alignas(64) SearchState {
 static void backtrackIterative(
     SearchState& state,
     const int n,
-    const int maxLen,
+    [[maybe_unused]] const int maxLen,
     StackFrame* stack)  // Pile pré-allouée passée en paramètre
 {
     int stackTop = 0;  // Index du sommet de pile
