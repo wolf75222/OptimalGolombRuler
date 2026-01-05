@@ -86,12 +86,30 @@ static void backtrackIterativeMPI(
         const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
         const int upperBound = currentGlobalBest - 1;
 
+        // =================================================================
+        // PRUNING: Borne inférieure de Golomb
+        // =================================================================
+        // r = nombre de marques restantes à placer
+        // Les r prochaines différences minimales possibles sont 1, 2, ..., r
+        // Donc la longueur finale minimale est: lastMark + r*(r+1)/2
+        // Si cette borne >= bestLen, on peut couper cette branche
+        // =================================================================
+        const int r = n - numMarks;  // marques restantes
+        const int minAdditionalLength = (r * (r + 1)) / 2;
+        if (lastMark + minAdditionalLength >= currentGlobalBest) [[unlikely]] {
+            stackTop--;
+            continue;
+        }
+
         int startNext = frame.nextCandidate;
         if (startNext == 0) {
             startNext = lastMark + 1;
         }
 
         bool pushedChild = false;
+
+        // CSAPP #3: Loop invariant hoisting - sortir les constantes
+        const int unrollLimit = numMarks - 3;
 
         for (int next = startNext; next <= upperBound; ++next) {
             // Re-check global best for early exit
@@ -106,8 +124,7 @@ static void backtrackIterativeMPI(
             int newDiffs[MAX_MARKS];
             int i = 0;
 
-            // Loop unrolling 4x
-            const int unrollLimit = numMarks - 3;
+            // CSAPP #7: Loop unrolling 4x
             for (; i < unrollLimit; i += 4) {
                 const int d0 = next - marks[i];
                 const int d1 = next - marks[i + 1];
@@ -124,8 +141,9 @@ static void backtrackIterativeMPI(
                 const uint64_t word2 = usedDiffs[d2 >> 6];
                 const uint64_t word3 = usedDiffs[d3 >> 6];
 
+                // CSAPP #6: Un seul test combiné pour réduire les branches
                 if ((word0 & mask0) | (word1 & mask1) |
-                    (word2 & mask2) | (word3 & mask3)) {
+                    (word2 & mask2) | (word3 & mask3)) [[likely]] {
                     valid = false;
                     break;
                 }
@@ -137,10 +155,10 @@ static void backtrackIterativeMPI(
             }
 
             // Tail loop
-            if (valid) {
+            if (valid) [[unlikely]] {
                 for (; i < numMarks; ++i) {
                     const int d = next - marks[i];
-                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) [[likely]] {
                         valid = false;
                         break;
                     }

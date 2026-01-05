@@ -120,6 +120,21 @@ static void backtrackIterative(
         // Borne de pruning dynamique - on veut STRICTEMENT mieux
         const int upperBound = state.bestLen - 1;
 
+        // =================================================================
+        // PRUNING: Borne inférieure de Golomb
+        // =================================================================
+        // r = nombre de marques restantes à placer
+        // Les r prochaines différences minimales possibles sont 1, 2, ..., r
+        // Donc la longueur finale minimale est: lastMark + r*(r+1)/2
+        // Si cette borne >= bestLen, on peut couper cette branche
+        // =================================================================
+        const int r = n - numMarks;  // marques restantes
+        const int minAdditionalLength = (r * (r + 1)) / 2;
+        if (lastMark + minAdditionalLength >= state.bestLen) [[unlikely]] {
+            stackTop--;
+            continue;
+        }
+
         // Détermine où commencer l'itération
         int startNext = frame.nextCandidate;
         if (startNext == 0) {
@@ -128,6 +143,9 @@ static void backtrackIterative(
         }
 
         bool pushedChild = false;
+
+        // CSAPP #3: Loop invariant hoisting - sortir les constantes
+        const int unrollLimit = numMarks - 3;
 
         // Boucle principale sur les candidats
         for (int next = startNext; next <= upperBound; ++next) {
@@ -138,13 +156,13 @@ static void backtrackIterative(
             int i = 0;
 
             // CSAPP #7: Unrolling 4x - traite 4 marques à la fois
-            const int unrollLimit = numMarks - 3;
             for (; i < unrollLimit; i += 4) {
                 const int d0 = next - marks[i];
                 const int d1 = next - marks[i + 1];
                 const int d2 = next - marks[i + 2];
                 const int d3 = next - marks[i + 3];
 
+                // CSAPP #7: ILP - calculs indépendants en parallèle
                 const uint64_t mask0 = 1ULL << (d0 & 63);
                 const uint64_t mask1 = 1ULL << (d1 & 63);
                 const uint64_t mask2 = 1ULL << (d2 & 63);
@@ -155,12 +173,14 @@ static void backtrackIterative(
                 const uint64_t word2 = usedDiffs[d2 >> 6];
                 const uint64_t word3 = usedDiffs[d3 >> 6];
 
+                // CSAPP #6: Un seul test combiné pour réduire les branches
                 if ((word0 & mask0) | (word1 & mask1) |
-                    (word2 & mask2) | (word3 & mask3)) {
+                    (word2 & mask2) | (word3 & mask3)) [[likely]] {
                     valid = false;
                     break;
                 }
 
+                // Stocke les différences pour utilisation après validation
                 newDiffs[numNewDiffs++] = d0;
                 newDiffs[numNewDiffs++] = d1;
                 newDiffs[numNewDiffs++] = d2;
@@ -168,10 +188,10 @@ static void backtrackIterative(
             }
 
             // Tail loop pour les marques restantes
-            if (valid) {
+            if (valid) [[unlikely]] {
                 for (; i < numMarks; ++i) {
                     const int d = next - marks[i];
-                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) [[likely]] {
                         valid = false;
                         break;
                     }
@@ -189,6 +209,16 @@ static void backtrackIterative(
             // Vérifie si solution complète
             if (newNumMarks == n) {
                 const int solutionLen = next;
+                // SYMMETRY BREAKING: a_1 < a_{n-1} - a_{n-2}
+                // On ne garde que la version "canonique" de chaque paire miroir.
+                // a_{n-1} = next (=solutionLen), a_{n-2} = lastMark, a_1 = marks[1]
+                // Condition: marks[1] < next - lastMark
+                // Équivalent: next > lastMark + marks[1]
+                if (next <= lastMark + marks[1]) {
+                    // Cette solution est le "miroir" - on la skip
+                    continue;
+                }
+
                 if (solutionLen < state.bestLen) {
                     state.bestLen = solutionLen;
                     state.bestNumMarks = n;
@@ -210,7 +240,7 @@ static void backtrackIterative(
                 newFrame.marks[numMarks] = next;
                 std::memcpy(newFrame.usedDiffs, usedDiffs, sizeof(uint64_t) * DIFF_WORDS);
 
-                // Applique les nouvelles différences sur le nouveau frame
+                // Applique les nouvelles différences (déjà calculées pendant validation)
                 for (int j = 0; j < numNewDiffs; ++j) {
                     const int d = newDiffs[j];
                     newFrame.usedDiffs[d >> 6] |= (1ULL << (d & 63));
@@ -262,8 +292,11 @@ void searchGolombSequential(int n, int maxLen, GolombRuler& best)
     alignas(64) StackFrame stack[MAX_MARKS];
 
     // Itère sur toutes les valeurs pour la première marque (après 0)
-    // OPTIMISATION: La symétrie permet de commencer à 1
-    for (int firstMark = 1; firstMark < state.bestLen; ++firstMark) {
+    // SYMMETRY BREAKING: a_1 <= bestLen/2
+    // Pour toute règle et son miroir, au moins une a son a_1 dans la moitié gauche.
+    // Cela élimine ~50% des doublons.
+    // NOTE: On recalcule la borne à chaque itération car bestLen peut diminuer.
+    for (int firstMark = 1; firstMark <= state.bestLen / 2 && firstMark < state.bestLen; ++firstMark) {
 
         // Setup le premier frame
         StackFrame& frame0 = stack[0];
