@@ -15,6 +15,7 @@
 // - Minimal atomic operations
 // - Loop invariants hoisted out of inner loops
 // - Fail-fast ordering in validity checks
+// - ITERATIVE BACKTRACKING with manual stack (no recursion overhead)
 // =============================================================================
 
 static std::atomic<long long> exploredCount{0};
@@ -25,14 +26,21 @@ constexpr int MAX_MARKS = 24;
 // Number of 64-bit words needed for MAX_DIFF bits (256 bits = 4 words)
 constexpr int DIFF_WORDS = (MAX_DIFF + 63) / 64;
 
-// Stack-allocated state for backtracking
-struct alignas(64) SearchState {  // Cache-line aligned
-    int marks[MAX_MARKS];           // Current ruler marks
-    uint64_t usedDiffs[DIFF_WORDS]; // Difference tracking as raw bits
-    int numMarks;                    // Current number of marks
-    int bestLen;                     // Best length found by this thread
-    int bestMarks[MAX_MARKS];        // Best solution found by this thread
-    int bestNumMarks;                // Number of marks in best solution
+// =============================================================================
+// STRUCTURE DE FRAME POUR LA PILE MANUELLE
+// =============================================================================
+struct alignas(64) StackFrame {
+    int marks[MAX_MARKS];           // État des marques à ce niveau
+    uint64_t usedDiffs[DIFF_WORDS]; // Bitmap des différences à ce niveau
+    int numMarks;                   // Nombre de marques à ce niveau
+    int nextCandidate;              // Prochain candidat à essayer
+};
+
+// Thread-local best solution
+struct alignas(64) ThreadBest {
+    int bestLen;                    // Best length found by this thread
+    int bestMarks[MAX_MARKS];       // Best solution found by this thread
+    int bestNumMarks;               // Number of marks in best solution
 };
 
 // Inline bit operations - faster than std::bitset methods
@@ -41,125 +49,149 @@ static inline void clearAllBits(uint64_t* bits) {
 }
 
 // =============================================================================
-// CORE BACKTRACKING FUNCTION
+// CORE BACKTRACKING - VERSION ITÉRATIVE AVEC PILE MANUELLE
 // =============================================================================
-// CSAPP optimizations applied:
-// - #2: Common case fast - validity check is the hot path
-// - #3: Loop invariants hoisted (numMarks, marks pointer, etc.)
-// - #4: No function calls in inner loop (all inlined)
-// - #5: Incremental diff updates (no recomputation)
-// - #6: Fail-fast with [[likely]]/[[unlikely]] hints
-// - #8: Minimal live variables in inner loop
+// Avantages vs récursion:
+// - Pas d'overhead d'appel de fonction (call/ret, save/restore registres)
+// - Pile pré-allouée = pas d'allocation dynamique
+// - Meilleure utilisation du cache (pile contiguë en mémoire)
+// - Permet au compilateur de mieux optimiser (pas de frontière de fonction)
 // =============================================================================
-static void backtrackOptimized(
-    SearchState& state,
+static void backtrackIterative(
+    ThreadBest& threadBest,
     const int n,
-    const int maxLen,                 // Feasibility bound (allow solutions <= maxLen)
-    std::atomic<int>& globalBestLen,  // Best solution found so far (shared)
-    long long& localExplored)
+    const int maxLen,
+    std::atomic<int>& globalBestLen,
+    long long& localExplored,
+    StackFrame* stack)
 {
-    localExplored++;
+    int stackTop = 0;
 
-    // CSAPP #3: Hoist ALL loop-invariant values
-    const int numMarks = state.numMarks;
-    const int* const marks = state.marks;
-    uint64_t* const usedDiffs = state.usedDiffs;
-    const int lastMark = marks[numMarks - 1];
-    const int start = lastMark + 1;
+    while (stackTop >= 0) {
+        localExplored++;
 
-    // Check if we already have n marks (edge case for n=2)
-    if (numMarks == n) [[unlikely]] {
-        const int solutionLen = lastMark;
-        // Accept if within feasibility bound AND better than thread's best
-        if (solutionLen <= maxLen && solutionLen < state.bestLen) {
-            state.bestLen = solutionLen;
-            state.bestNumMarks = n;
-            for (int i = 0; i < n; ++i) {
-                state.bestMarks[i] = marks[i];
-            }
-            // Update global best atomically
-            int expected = globalBestLen.load(std::memory_order_relaxed);
-            while (solutionLen < expected &&
-                   !globalBestLen.compare_exchange_weak(expected, solutionLen,
-                       std::memory_order_release, std::memory_order_relaxed)) {
-            }
-        }
-        return;
-    }
+        StackFrame& frame = stack[stackTop];
 
-    // Local diffs array for THIS recursion level
-    // CRITICAL: Must be local to prevent corruption across recursion
-    int diffs[MAX_MARKS];
+        const int numMarks = frame.numMarks;
+        int* const marks = frame.marks;
+        uint64_t* const usedDiffs = frame.usedDiffs;
+        const int lastMark = marks[numMarks - 1];
 
-    // CSAPP #2: Make common case fast
-    // The loop bound uses maxLen (feasibility) as upper bound
-    // Pruning is done inside the loop by checking globalBestLen each iteration
-    for (int next = start; next <= maxLen; ++next) {
-        // CSAPP #6: Fail-fast pruning
-        // Re-read global best each iteration to catch updates from other threads
-        // Use strict < for pruning since we want solutions STRICTLY better
+        // Re-read global best for aggressive pruning
         const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
-        if (next >= currentGlobalBest) [[unlikely]] {
-            // Can't possibly find a better solution with this or higher next values
-            break;
+        const int upperBound = currentGlobalBest - 1;
+
+        int startNext = frame.nextCandidate;
+        if (startNext == 0) {
+            startNext = lastMark + 1;
         }
 
-        // CSAPP #2/#6: Validity check - this is the HOT PATH
-        // Check all differences for conflicts (fail-fast)
-        bool valid = true;
-        int numNewDiffs = 0;
+        bool pushedChild = false;
 
-        // CSAPP #8: Minimal live variables - compute d inline
-        for (int i = 0; i < numMarks; ++i) {
-            const int d = next - marks[i];
-            // Inline bit test to avoid function call overhead
-            if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
-                valid = false;
-                break;  // Fail-fast
+        for (int next = startNext; next <= upperBound; ++next) {
+            // Re-check global best for early exit
+            const int newGlobalBest = globalBestLen.load(std::memory_order_relaxed);
+            if (next >= newGlobalBest) [[unlikely]] {
+                break;
             }
-            diffs[numNewDiffs++] = d;
-        }
 
-        // CSAPP #6: Most candidates are rejected
-        if (!valid) [[likely]] continue;
+            // === HOT PATH: Validation des différences ===
+            bool valid = true;
+            int numNewDiffs = 0;
+            int newDiffs[MAX_MARKS];
+            int i = 0;
 
-        // === VALID CANDIDATE - Apply changes ===
+            // Loop unrolling 4x
+            const int unrollLimit = numMarks - 3;
+            for (; i < unrollLimit; i += 4) {
+                const int d0 = next - marks[i];
+                const int d1 = next - marks[i + 1];
+                const int d2 = next - marks[i + 2];
+                const int d3 = next - marks[i + 3];
 
-        // CSAPP #5: Incremental update (not recomputation)
-        for (int i = 0; i < numNewDiffs; ++i) {
-            const int d = diffs[i];
-            usedDiffs[d >> 6] |= (1ULL << (d & 63));
-        }
-        state.marks[numMarks] = next;
-        state.numMarks = numMarks + 1;
+                const uint64_t mask0 = 1ULL << (d0 & 63);
+                const uint64_t mask1 = 1ULL << (d1 & 63);
+                const uint64_t mask2 = 1ULL << (d2 & 63);
+                const uint64_t mask3 = 1ULL << (d3 & 63);
 
-        // Check if complete solution
-        if (state.numMarks == n) {
-            const int solutionLen = next;  // next == marks[n-1]
-            // Accept if within bounds AND better than current best
-            if (solutionLen <= maxLen && solutionLen < state.bestLen) {
-                state.bestLen = solutionLen;
-                state.bestNumMarks = n;
-                for (int j = 0; j < n; ++j) {
-                    state.bestMarks[j] = state.marks[j];
+                const uint64_t word0 = usedDiffs[d0 >> 6];
+                const uint64_t word1 = usedDiffs[d1 >> 6];
+                const uint64_t word2 = usedDiffs[d2 >> 6];
+                const uint64_t word3 = usedDiffs[d3 >> 6];
+
+                if ((word0 & mask0) | (word1 & mask1) |
+                    (word2 & mask2) | (word3 & mask3)) {
+                    valid = false;
+                    break;
                 }
-                // Update global best atomically
-                int expected = globalBestLen.load(std::memory_order_relaxed);
-                while (solutionLen < expected &&
-                       !globalBestLen.compare_exchange_weak(expected, solutionLen,
-                           std::memory_order_release, std::memory_order_relaxed)) {
+
+                newDiffs[numNewDiffs++] = d0;
+                newDiffs[numNewDiffs++] = d1;
+                newDiffs[numNewDiffs++] = d2;
+                newDiffs[numNewDiffs++] = d3;
+            }
+
+            // Tail loop
+            if (valid) {
+                for (; i < numMarks; ++i) {
+                    const int d = next - marks[i];
+                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+                        valid = false;
+                        break;
+                    }
+                    newDiffs[numNewDiffs++] = d;
                 }
             }
-        } else {
-            // Recurse to explore deeper
-            backtrackOptimized(state, n, maxLen, globalBestLen, localExplored);
+
+            if (!valid) [[likely]] {
+                continue;
+            }
+
+            // === CANDIDAT VALIDE ===
+            const int newNumMarks = numMarks + 1;
+
+            if (newNumMarks == n) {
+                const int solutionLen = next;
+                if (solutionLen < threadBest.bestLen) {
+                    threadBest.bestLen = solutionLen;
+                    threadBest.bestNumMarks = n;
+                    for (int j = 0; j < numMarks; ++j) {
+                        threadBest.bestMarks[j] = marks[j];
+                    }
+                    threadBest.bestMarks[numMarks] = next;
+
+                    // Update global best atomically
+                    int expected = globalBestLen.load(std::memory_order_relaxed);
+                    while (solutionLen < expected &&
+                           !globalBestLen.compare_exchange_weak(expected, solutionLen,
+                               std::memory_order_release, std::memory_order_relaxed)) {
+                    }
+                }
+            } else {
+                // Push new frame
+                frame.nextCandidate = next + 1;
+
+                StackFrame& newFrame = stack[stackTop + 1];
+                std::memcpy(newFrame.marks, marks, sizeof(int) * numMarks);
+                newFrame.marks[numMarks] = next;
+                std::memcpy(newFrame.usedDiffs, usedDiffs, sizeof(uint64_t) * DIFF_WORDS);
+
+                for (int j = 0; j < numNewDiffs; ++j) {
+                    const int d = newDiffs[j];
+                    newFrame.usedDiffs[d >> 6] |= (1ULL << (d & 63));
+                }
+
+                newFrame.numMarks = newNumMarks;
+                newFrame.nextCandidate = 0;
+
+                stackTop++;
+                pushedChild = true;
+                break;
+            }
         }
 
-        // === BACKTRACK - Undo changes ===
-        state.numMarks = numMarks;
-        for (int i = 0; i < numNewDiffs; ++i) {
-            const int d = diffs[i];
-            usedDiffs[d >> 6] &= ~(1ULL << (d & 63));
+        if (!pushedChild) {
+            stackTop--;
         }
     }
 }
@@ -182,52 +214,53 @@ void searchGolomb(int n, int maxLen, GolombRuler& best)
 
     #pragma omp parallel shared(globalBestLen, finalBestLen, finalBestMarks, finalBestNumMarks)
     {
-        // Thread-local state - completely independent per thread
-        SearchState state{};
-        state.marks[0] = 0;
-        state.numMarks = 1;
-        state.bestLen = maxLen + 1;
-        state.bestNumMarks = 0;
+        // Thread-local best solution
+        ThreadBest threadBest{};
+        threadBest.bestLen = maxLen + 1;
+        threadBest.bestNumMarks = 0;
         long long threadExplored = 0;
+
+        // Thread-local stack (pré-allouée une seule fois par thread)
+        alignas(64) StackFrame stack[MAX_MARKS];
 
         // Distribute first-level branches across threads
         // Each thread explores its assigned branches completely
         #pragma omp for schedule(dynamic, 1)
         for (int firstMark = 1; firstMark <= maxLen; ++firstMark) {
             // Get current global best for pruning
-            // This is purely for optimization - doesn't affect correctness
             const int currentGlobal = globalBestLen.load(std::memory_order_acquire);
 
-            // Skip if this branch can't possibly improve (pruning optimization)
+            // Skip if this branch can't possibly improve
             if (firstMark >= currentGlobal) {
                 continue;
             }
 
-            // Setup state for this branch
-            state.marks[0] = 0;
-            state.marks[1] = firstMark;
-            state.numMarks = 2;
-            clearAllBits(state.usedDiffs);
-            state.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
+            // Setup first frame for this branch
+            StackFrame& frame0 = stack[0];
+            std::memset(frame0.marks, 0, sizeof(frame0.marks));
+            std::memset(frame0.usedDiffs, 0, sizeof(frame0.usedDiffs));
+            frame0.marks[0] = 0;
+            frame0.marks[1] = firstMark;
+            frame0.numMarks = 2;
+            frame0.nextCandidate = 0;
+            frame0.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
 
-            // Explore this branch - state.bestLen will be updated if better found
-            backtrackOptimized(state, n, maxLen, globalBestLen, threadExplored);
+            // Explore this branch with iterative backtracking
+            backtrackIterative(threadBest, n, maxLen, globalBestLen, threadExplored, stack);
         }
 
         // Aggregate explored count
         exploredCount.fetch_add(threadExplored, std::memory_order_relaxed);
 
         // After ALL work is done, merge results
-        // The implicit barrier at end of 'omp for' ensures all threads have finished
-        if (state.bestNumMarks > 0) {
+        if (threadBest.bestNumMarks > 0) {
             #pragma omp critical(merge_best)
             {
-                // Strict comparison: only update if strictly better
-                if (state.bestLen < finalBestLen) {
-                    finalBestLen = state.bestLen;
-                    finalBestNumMarks = state.bestNumMarks;
-                    for (int i = 0; i < state.bestNumMarks; ++i) {
-                        finalBestMarks[i] = state.bestMarks[i];
+                if (threadBest.bestLen < finalBestLen) {
+                    finalBestLen = threadBest.bestLen;
+                    finalBestNumMarks = threadBest.bestNumMarks;
+                    for (int i = 0; i < threadBest.bestNumMarks; ++i) {
+                        finalBestMarks[i] = threadBest.bestMarks[i];
                     }
                 }
             }

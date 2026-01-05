@@ -25,7 +25,10 @@
       "Bash(./scripts/build_mpi.bat)",
       "Bash(mpiexec:*)",
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_sequential.bat dev\")",
-      "Bash(cmd.exe /c \"c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\scripts\\\\build_sequential.bat dev\")"
+      "Bash(cmd.exe /c \"c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler\\\\scripts\\\\build_sequential.bat dev\")",
+      "Bash(wc:*)",
+      "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && call scripts\\\\build_sequential.bat dev 2>&1\")",
+      "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_sequential.bat dev 2>&1\")"
     ],
     "deny": [],
     "ask": []

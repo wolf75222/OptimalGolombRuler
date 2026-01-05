@@ -47,6 +47,11 @@
 //    - Tests de correctness sur n=2 à n=12
 //    - Validation que toutes les différences sont uniques
 //
+// 11) PILE MANUELLE (NEW):
+//    - Conversion de la récursion en itération
+//    - Pile pré-allouée en heap pour éviter overhead des appels de fonction
+//    - Pas de push/pop std::stack (évite allocations dynamiques)
+//
 // =============================================================================
 
 static long long g_exploredCount = 0;
@@ -55,135 +60,174 @@ static long long g_exploredCount = 0;
 constexpr int MAX_MARKS = 24;
 constexpr int DIFF_WORDS = (MAX_DIFF + 63) >> 6;  // 4 mots de 64 bits
 
-// État de recherche - aligné pour cache
+// =============================================================================
+// STRUCTURE DE FRAME POUR LA PILE MANUELLE
+// =============================================================================
+// Chaque frame représente un niveau de la récursion
+// Pré-alloué pour éviter les allocations dynamiques
+// COHÉRENT avec OpenMP/MPI: même structure minimale
+struct alignas(64) StackFrame {
+    int marks[MAX_MARKS];           // État des marques à ce niveau
+    uint64_t usedDiffs[DIFF_WORDS]; // Bitmap des différences à ce niveau
+    int numMarks;                   // Nombre de marques à ce niveau
+    int nextCandidate;              // Prochain candidat à essayer (pour reprendre l'itération)
+};
+
+// État global de recherche - aligné pour cache
 struct alignas(64) SearchState {
-    int marks[MAX_MARKS];           // Marques actuelles de la règle
-    uint64_t usedDiffs[DIFF_WORDS]; // Bitmap des différences utilisées
-    int numMarks;                   // Nombre actuel de marques
     int bestLen;                    // Meilleure longueur trouvée
     int bestMarks[MAX_MARKS];       // Meilleure solution trouvée
     int bestNumMarks;               // Taille de la meilleure solution
 };
 
 // =============================================================================
-// CORE BACKTRACKING - Version Récursive Optimisée
+// CORE BACKTRACKING - VERSION ITÉRATIVE AVEC PILE MANUELLE
 // =============================================================================
-static void backtrack(
+// Avantages vs récursion:
+// - Pas d'overhead d'appel de fonction (call/ret, save/restore registres)
+// - Pile pré-allouée = pas d'allocation dynamique
+// - Meilleure utilisation du cache (pile contiguë en mémoire)
+// - Permet au compilateur de mieux optimiser (pas de frontière de fonction)
+//
+// LOGIQUE:
+// - Chaque frame stocke: marks[], usedDiffs[], numMarks, nextCandidate
+// - On entre dans un frame, on essaye tous les candidats next
+// - Pour chaque candidat valide: soit on a n marques (solution), soit on push
+// - Quand on revient d'un enfant (après pop), on continue avec nextCandidate
+// =============================================================================
+static void backtrackIterative(
     SearchState& state,
     const int n,
-    const int maxLen)
+    const int maxLen,
+    StackFrame* stack)  // Pile pré-allouée passée en paramètre
 {
-    g_exploredCount++;
+    int stackTop = 0;  // Index du sommet de pile
 
-    // CSAPP #3: Hoist ALL loop-invariant values
-    const int numMarks = state.numMarks;
-    const int* const marks = state.marks;
-    uint64_t* const usedDiffs = state.usedDiffs;
-    const int lastMark = marks[numMarks - 1];
-    const int start = lastMark + 1;
+    // Initialise le premier frame (déjà configuré par l'appelant)
+    // stack[0] contient déjà les 2 premières marques
 
-    // Borne de pruning: on cherche STRICTEMENT mieux que bestLen
-    const int upperBound = state.bestLen - 1;
+    while (stackTop >= 0) {
+        g_exploredCount++;
 
-    // Tableau local pour stocker les nouvelles différences de ce niveau
-    // CRITIQUE: doit être local pour éviter corruption entre récursions
-    int newDiffs[MAX_MARKS];
+        StackFrame& frame = stack[stackTop];
 
-    // Boucle principale sur les candidats
-    for (int next = start; next <= upperBound; ++next) {
+        // Récupère l'état du frame courant
+        const int numMarks = frame.numMarks;
+        int* const marks = frame.marks;
+        uint64_t* const usedDiffs = frame.usedDiffs;
+        const int lastMark = marks[numMarks - 1];
 
-        // === HOT PATH: Validation des différences ===
-        // CSAPP #2: Make common case fast
-        // CSAPP #7: Loop unrolling pour ILP
+        // Borne de pruning dynamique - on veut STRICTEMENT mieux
+        const int upperBound = state.bestLen - 1;
 
-        bool valid = true;
-        int numNewDiffs = 0;
-        int i = 0;
-
-        // CSAPP #7: Unrolling 4x - traite 4 marques à la fois
-        const int unrollLimit = numMarks - 3;
-        for (; i < unrollLimit; i += 4) {
-            // Calcul des 4 différences en parallèle (ILP)
-            const int d0 = next - marks[i];
-            const int d1 = next - marks[i + 1];
-            const int d2 = next - marks[i + 2];
-            const int d3 = next - marks[i + 3];
-
-            // Calcul des masques en parallèle (ILP)
-            const uint64_t mask0 = 1ULL << (d0 & 63);
-            const uint64_t mask1 = 1ULL << (d1 & 63);
-            const uint64_t mask2 = 1ULL << (d2 & 63);
-            const uint64_t mask3 = 1ULL << (d3 & 63);
-
-            // Lecture des mots en parallèle (ILP)
-            const uint64_t word0 = usedDiffs[d0 >> 6];
-            const uint64_t word1 = usedDiffs[d1 >> 6];
-            const uint64_t word2 = usedDiffs[d2 >> 6];
-            const uint64_t word3 = usedDiffs[d3 >> 6];
-
-            // Test combiné - un seul branch
-            if ((word0 & mask0) | (word1 & mask1) |
-                (word2 & mask2) | (word3 & mask3)) {
-                valid = false;
-                break;
-            }
-
-            // Stocke les diffs pour le backtrack
-            newDiffs[numNewDiffs++] = d0;
-            newDiffs[numNewDiffs++] = d1;
-            newDiffs[numNewDiffs++] = d2;
-            newDiffs[numNewDiffs++] = d3;
+        // Détermine où commencer l'itération
+        int startNext = frame.nextCandidate;
+        if (startNext == 0) {
+            // Première visite de ce frame
+            startNext = lastMark + 1;
         }
 
-        // Traite les marques restantes (tail loop)
-        if (valid) {
-            for (; i < numMarks; ++i) {
-                const int d = next - marks[i];
-                // CSAPP: Test bit inline avec shift operations
-                if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+        bool pushedChild = false;
+
+        // Boucle principale sur les candidats
+        for (int next = startNext; next <= upperBound; ++next) {
+            // === HOT PATH: Validation des différences ===
+            bool valid = true;
+            int numNewDiffs = 0;
+            int newDiffs[MAX_MARKS];
+            int i = 0;
+
+            // CSAPP #7: Unrolling 4x - traite 4 marques à la fois
+            const int unrollLimit = numMarks - 3;
+            for (; i < unrollLimit; i += 4) {
+                const int d0 = next - marks[i];
+                const int d1 = next - marks[i + 1];
+                const int d2 = next - marks[i + 2];
+                const int d3 = next - marks[i + 3];
+
+                const uint64_t mask0 = 1ULL << (d0 & 63);
+                const uint64_t mask1 = 1ULL << (d1 & 63);
+                const uint64_t mask2 = 1ULL << (d2 & 63);
+                const uint64_t mask3 = 1ULL << (d3 & 63);
+
+                const uint64_t word0 = usedDiffs[d0 >> 6];
+                const uint64_t word1 = usedDiffs[d1 >> 6];
+                const uint64_t word2 = usedDiffs[d2 >> 6];
+                const uint64_t word3 = usedDiffs[d3 >> 6];
+
+                if ((word0 & mask0) | (word1 & mask1) |
+                    (word2 & mask2) | (word3 & mask3)) {
                     valid = false;
                     break;
                 }
-                newDiffs[numNewDiffs++] = d;
+
+                newDiffs[numNewDiffs++] = d0;
+                newDiffs[numNewDiffs++] = d1;
+                newDiffs[numNewDiffs++] = d2;
+                newDiffs[numNewDiffs++] = d3;
             }
-        }
 
-        // CSAPP #6: La plupart des candidats sont rejetés
-        if (!valid) [[likely]] {
-            continue;
-        }
-
-        // === CANDIDAT VALIDE: Applique les changements ===
-
-        // CSAPP #5: Mise à jour incrémentale des bits
-        for (int j = 0; j < numNewDiffs; ++j) {
-            const int d = newDiffs[j];
-            usedDiffs[d >> 6] |= (1ULL << (d & 63));
-        }
-        state.marks[numMarks] = next;
-        state.numMarks = numMarks + 1;
-
-        // Vérifie si solution complète
-        if (state.numMarks == n) {
-            // Solution trouvée!
-            const int solutionLen = next;
-            if (solutionLen < state.bestLen) {
-                state.bestLen = solutionLen;
-                state.bestNumMarks = n;
-                for (int j = 0; j < n; ++j) {
-                    state.bestMarks[j] = state.marks[j];
+            // Tail loop pour les marques restantes
+            if (valid) {
+                for (; i < numMarks; ++i) {
+                    const int d = next - marks[i];
+                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+                        valid = false;
+                        break;
+                    }
+                    newDiffs[numNewDiffs++] = d;
                 }
             }
-        } else {
-            // Récursion pour explorer plus profond
-            backtrack(state, n, maxLen);
+
+            if (!valid) [[likely]] {
+                continue;
+            }
+
+            // === CANDIDAT VALIDE ===
+            const int newNumMarks = numMarks + 1;
+
+            // Vérifie si solution complète
+            if (newNumMarks == n) {
+                const int solutionLen = next;
+                if (solutionLen < state.bestLen) {
+                    state.bestLen = solutionLen;
+                    state.bestNumMarks = n;
+                    for (int j = 0; j < numMarks; ++j) {
+                        state.bestMarks[j] = marks[j];
+                    }
+                    state.bestMarks[numMarks] = next;
+                }
+                // Continue à chercher d'autres candidats (pas de push)
+            } else {
+                // Push nouveau frame pour explorer plus profond
+                // Sauvegarde où reprendre dans CE frame quand on reviendra
+                frame.nextCandidate = next + 1;
+
+                StackFrame& newFrame = stack[stackTop + 1];
+
+                // Copie l'état courant vers le nouveau frame
+                std::memcpy(newFrame.marks, marks, sizeof(int) * numMarks);
+                newFrame.marks[numMarks] = next;
+                std::memcpy(newFrame.usedDiffs, usedDiffs, sizeof(uint64_t) * DIFF_WORDS);
+
+                // Applique les nouvelles différences sur le nouveau frame
+                for (int j = 0; j < numNewDiffs; ++j) {
+                    const int d = newDiffs[j];
+                    newFrame.usedDiffs[d >> 6] |= (1ULL << (d & 63));
+                }
+
+                newFrame.numMarks = newNumMarks;
+                newFrame.nextCandidate = 0;  // Commencer du début
+
+                stackTop++;
+                pushedChild = true;
+                break;  // On explorera ce nouveau frame au prochain tour de while
+            }
         }
 
-        // === BACKTRACK: Annule les changements ===
-        state.numMarks = numMarks;
-        for (int j = 0; j < numNewDiffs; ++j) {
-            const int d = newDiffs[j];
-            usedDiffs[d >> 6] &= ~(1ULL << (d & 63));
+        if (!pushedChild) {
+            // Plus de candidats à ce niveau, pop le frame
+            stackTop--;
         }
     }
 }
@@ -208,29 +252,33 @@ void searchGolombSequential(int n, int maxLen, GolombRuler& best)
         return;
     }
 
-    // Initialise l'état
+    // Initialise l'état global (solution)
     SearchState state{};
-    state.marks[0] = 0;
-    state.numMarks = 1;
     state.bestLen = maxLen + 1;  // Aucune solution trouvée
     state.bestNumMarks = 0;
-    std::memset(state.usedDiffs, 0, sizeof(state.usedDiffs));
+
+    // Alloue la pile une seule fois pour toutes les branches
+    // Taille = n car on peut avoir au max n niveaux de profondeur
+    alignas(64) StackFrame stack[MAX_MARKS];
 
     // Itère sur toutes les valeurs pour la première marque (après 0)
     // OPTIMISATION: La symétrie permet de commencer à 1
     for (int firstMark = 1; firstMark < state.bestLen; ++firstMark) {
 
-        // Setup état pour cette branche
-        state.marks[0] = 0;
-        state.marks[1] = firstMark;
-        state.numMarks = 2;
-        std::memset(state.usedDiffs, 0, sizeof(state.usedDiffs));
+        // Setup le premier frame
+        StackFrame& frame0 = stack[0];
+        std::memset(frame0.marks, 0, sizeof(frame0.marks));
+        std::memset(frame0.usedDiffs, 0, sizeof(frame0.usedDiffs));
+        frame0.marks[0] = 0;
+        frame0.marks[1] = firstMark;
+        frame0.numMarks = 2;
+        frame0.nextCandidate = 0;
 
         // Marque la première différence comme utilisée
-        state.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
+        frame0.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
 
-        // Explore cette branche
-        backtrack(state, n, maxLen);
+        // Explore cette branche avec la pile itérative
+        backtrackIterative(state, n, maxLen, stack);
     }
 
     // Copie le résultat

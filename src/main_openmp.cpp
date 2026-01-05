@@ -14,9 +14,9 @@ const std::string CHANGES = "";
 // DEV  : tailles réduites pour tests rapides sur Windows
 // PROD : configuration complète pour cluster HPC/Slurm
 #ifdef DEV_MODE
-    const std::vector<int> DEFAULT_SIZES = { 16 };  // n=16 pour benchmark rapide
+    const std::vector<int> DEFAULT_SIZES = { 9, 10 };  // Quick test
     const int DEFAULT_MAX_LEN = MAX_DIFF - 1;       // 255 - maximal search space
-    const std::vector<int> DEFAULT_THREADS = { 1 };
+    const std::vector<int> DEFAULT_THREADS = { 1, 2, 4, 8 };
     const char* MODE_NAME = "DEV";
 #else
     const std::vector<int> DEFAULT_SIZES = { 10, 11, 12 };

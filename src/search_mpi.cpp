@@ -19,6 +19,7 @@
 // - Hoisted loop-invariant memory accesses
 // - Hypercube all-reduce for fast bound propagation
 // - Dynamic work distribution with work stealing
+// - ITERATIVE BACKTRACKING with manual stack (no recursion overhead)
 // =============================================================================
 
 static std::atomic<long long> exploredCountMPI{0};
@@ -36,11 +37,18 @@ constexpr int MAX_MARKS = 24;
 // Number of 64-bit words needed for MAX_DIFF bits (256 bits = 4 words)
 constexpr int DIFF_WORDS = (MAX_DIFF + 63) / 64;
 
-// Cache-line aligned search state
-struct alignas(64) SearchState {
-    int marks[MAX_MARKS];
-    uint64_t usedDiffs[DIFF_WORDS];  // Direct bit manipulation
-    int numMarks;
+// =============================================================================
+// STRUCTURE DE FRAME POUR LA PILE MANUELLE
+// =============================================================================
+struct alignas(64) StackFrame {
+    int marks[MAX_MARKS];           // État des marques à ce niveau
+    uint64_t usedDiffs[DIFF_WORDS]; // Bitmap des différences à ce niveau
+    int numMarks;                   // Nombre de marques à ce niveau
+    int nextCandidate;              // Prochain candidat à essayer
+};
+
+// Thread-local best solution
+struct alignas(64) ThreadBest {
     int bestLen;
     int bestMarks[MAX_MARKS];
     int bestNumMarks;
@@ -51,102 +59,144 @@ static inline void clearAllBits(uint64_t* bits) {
     std::memset(bits, 0, DIFF_WORDS * sizeof(uint64_t));
 }
 
-// Optimized backtracking with CSAPP optimizations
-static inline void backtrackMPI(
-    SearchState& state,
+// =============================================================================
+// CORE BACKTRACKING - VERSION ITÉRATIVE AVEC PILE MANUELLE (MPI VERSION)
+// =============================================================================
+static void backtrackIterativeMPI(
+    ThreadBest& threadBest,
     const int n,
     const int maxLen,
     std::atomic<int>& globalBestLen,
-    long long& localExplored)
+    long long& localExplored,
+    StackFrame* stack)
 {
-    localExplored++;
+    int stackTop = 0;
 
-    // CSAPP: Hoist loop-invariant memory accesses
-    const int numMarks = state.numMarks;
-    const int* const marks = state.marks;
-    uint64_t* const usedDiffs = state.usedDiffs;
-    const int lastMark = marks[numMarks - 1];
-    const int start = lastMark + 1;
+    while (stackTop >= 0) {
+        localExplored++;
 
-    // Check if we already have n marks (complete solution)
-    if (numMarks == n) [[unlikely]] {
-        const int solutionLen = lastMark;
-        if (solutionLen <= maxLen && solutionLen < state.bestLen) {
-            state.bestLen = solutionLen;
-            state.bestNumMarks = n;
-            for (int i = 0; i < n; ++i) {
-                state.bestMarks[i] = marks[i];
-            }
-            // Update global best atomically
-            int expected = globalBestLen.load(std::memory_order_relaxed);
-            while (solutionLen < expected &&
-                   !globalBestLen.compare_exchange_weak(expected, solutionLen,
-                       std::memory_order_release, std::memory_order_relaxed)) {
-            }
-        }
-        return;
-    }
+        StackFrame& frame = stack[stackTop];
 
-    // Local diffs array for THIS recursion level
-    // CRITICAL: Must be local to prevent corruption across recursion
-    int diffs[MAX_MARKS];
+        const int numMarks = frame.numMarks;
+        int* const marks = frame.marks;
+        uint64_t* const usedDiffs = frame.usedDiffs;
+        const int lastMark = marks[numMarks - 1];
 
-    // Loop with pruning - re-read globalBestLen each iteration
-    for (int next = start; next <= maxLen; ++next) {
-        // Re-read global best each iteration to catch updates from other threads
+        // Re-read global best for aggressive pruning
         const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
-        if (next >= currentGlobalBest) [[unlikely]] {
-            break;
+        const int upperBound = currentGlobalBest - 1;
+
+        int startNext = frame.nextCandidate;
+        if (startNext == 0) {
+            startNext = lastMark + 1;
         }
 
-        // Check all differences for conflicts (fail-fast)
-        bool valid = true;
-        int numNewDiffs = 0;
+        bool pushedChild = false;
 
-        for (int i = 0; i < numMarks; ++i) {
-            const int d = next - marks[i];
-            if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
-                valid = false;
+        for (int next = startNext; next <= upperBound; ++next) {
+            // Re-check global best for early exit
+            const int newGlobalBest = globalBestLen.load(std::memory_order_relaxed);
+            if (next >= newGlobalBest) [[unlikely]] {
                 break;
             }
-            diffs[numNewDiffs++] = d;
-        }
 
-        if (!valid) [[likely]] continue;
+            // === HOT PATH: Validation des différences ===
+            bool valid = true;
+            int numNewDiffs = 0;
+            int newDiffs[MAX_MARKS];
+            int i = 0;
 
-        // Apply all differences
-        for (int i = 0; i < numNewDiffs; ++i) {
-            const int d = diffs[i];
-            usedDiffs[d >> 6] |= (1ULL << (d & 63));
-        }
-        state.marks[numMarks] = next;
-        state.numMarks = numMarks + 1;
+            // Loop unrolling 4x
+            const int unrollLimit = numMarks - 3;
+            for (; i < unrollLimit; i += 4) {
+                const int d0 = next - marks[i];
+                const int d1 = next - marks[i + 1];
+                const int d2 = next - marks[i + 2];
+                const int d3 = next - marks[i + 3];
 
-        // Check if complete solution
-        if (state.numMarks == n) {
-            const int solutionLen = next;
-            if (solutionLen <= maxLen && solutionLen < state.bestLen) {
-                state.bestLen = solutionLen;
-                state.bestNumMarks = n;
-                for (int j = 0; j < n; ++j) {
-                    state.bestMarks[j] = state.marks[j];
+                const uint64_t mask0 = 1ULL << (d0 & 63);
+                const uint64_t mask1 = 1ULL << (d1 & 63);
+                const uint64_t mask2 = 1ULL << (d2 & 63);
+                const uint64_t mask3 = 1ULL << (d3 & 63);
+
+                const uint64_t word0 = usedDiffs[d0 >> 6];
+                const uint64_t word1 = usedDiffs[d1 >> 6];
+                const uint64_t word2 = usedDiffs[d2 >> 6];
+                const uint64_t word3 = usedDiffs[d3 >> 6];
+
+                if ((word0 & mask0) | (word1 & mask1) |
+                    (word2 & mask2) | (word3 & mask3)) {
+                    valid = false;
+                    break;
                 }
-                int expected = globalBestLen.load(std::memory_order_relaxed);
-                while (solutionLen < expected &&
-                       !globalBestLen.compare_exchange_weak(expected, solutionLen,
-                           std::memory_order_release, std::memory_order_relaxed)) {
+
+                newDiffs[numNewDiffs++] = d0;
+                newDiffs[numNewDiffs++] = d1;
+                newDiffs[numNewDiffs++] = d2;
+                newDiffs[numNewDiffs++] = d3;
+            }
+
+            // Tail loop
+            if (valid) {
+                for (; i < numMarks; ++i) {
+                    const int d = next - marks[i];
+                    if (usedDiffs[d >> 6] & (1ULL << (d & 63))) {
+                        valid = false;
+                        break;
+                    }
+                    newDiffs[numNewDiffs++] = d;
                 }
             }
-        } else {
-            // Recurse to explore deeper
-            backtrackMPI(state, n, maxLen, globalBestLen, localExplored);
+
+            if (!valid) [[likely]] {
+                continue;
+            }
+
+            // === CANDIDAT VALIDE ===
+            const int newNumMarks = numMarks + 1;
+
+            if (newNumMarks == n) {
+                const int solutionLen = next;
+                if (solutionLen < threadBest.bestLen) {
+                    threadBest.bestLen = solutionLen;
+                    threadBest.bestNumMarks = n;
+                    for (int j = 0; j < numMarks; ++j) {
+                        threadBest.bestMarks[j] = marks[j];
+                    }
+                    threadBest.bestMarks[numMarks] = next;
+
+                    // Update global best atomically
+                    int expected = globalBestLen.load(std::memory_order_relaxed);
+                    while (solutionLen < expected &&
+                           !globalBestLen.compare_exchange_weak(expected, solutionLen,
+                               std::memory_order_release, std::memory_order_relaxed)) {
+                    }
+                }
+            } else {
+                // Push new frame
+                frame.nextCandidate = next + 1;
+
+                StackFrame& newFrame = stack[stackTop + 1];
+                std::memcpy(newFrame.marks, marks, sizeof(int) * numMarks);
+                newFrame.marks[numMarks] = next;
+                std::memcpy(newFrame.usedDiffs, usedDiffs, sizeof(uint64_t) * DIFF_WORDS);
+
+                for (int j = 0; j < numNewDiffs; ++j) {
+                    const int d = newDiffs[j];
+                    newFrame.usedDiffs[d >> 6] |= (1ULL << (d & 63));
+                }
+
+                newFrame.numMarks = newNumMarks;
+                newFrame.nextCandidate = 0;
+
+                stackTop++;
+                pushedChild = true;
+                break;
+            }
         }
 
-        // Undo all differences
-        state.numMarks = numMarks;
-        for (int i = 0; i < numNewDiffs; ++i) {
-            const int d = diffs[i];
-            usedDiffs[d >> 6] &= ~(1ULL << (d & 63));
+        if (!pushedChild) {
+            stackTop--;
         }
     }
 }
@@ -154,6 +204,7 @@ static inline void backtrackMPI(
 // Process a single branch with OpenMP parallelization
 // This explores all solutions starting with marks[1] = branchStart
 // Now uses OpenMP to parallelize the exploration of second-level branches
+// Uses ITERATIVE backtracking with manual stack for performance
 static void processBranch(
     int branchStart,
     int n,
@@ -175,13 +226,13 @@ static void processBranch(
 
     #pragma omp parallel shared(globalBestLen, finalBestLen, finalBestMarks, finalBestNumMarks)
     {
-        SearchState state{};
-        state.marks[0] = 0;
-        state.marks[1] = branchStart;
-        state.numMarks = 2;
-        state.bestLen = maxLen + 1;
-        state.bestNumMarks = 0;
+        ThreadBest threadBest{};
+        threadBest.bestLen = maxLen + 1;
+        threadBest.bestNumMarks = 0;
         long long threadExplored = 0;
+
+        // Thread-local stack
+        alignas(64) StackFrame stack[MAX_MARKS];
 
         // Parallelize over second mark positions (marks[2])
         // Range: branchStart+1 to currentBest-1
@@ -193,32 +244,28 @@ static void processBranch(
             }
 
             // Compute differences for marks[2] = secondMark
-            // d1 = secondMark - 0 = secondMark (diff with mark 0)
-            // d2 = secondMark - branchStart (diff with mark 1)
-            // Existing diff: branchStart (from mark 1 - mark 0)
             const int d1 = secondMark;
             const int d2 = secondMark - branchStart;
 
-            // Check for conflicts: all three differences must be distinct
-            // d1 == branchStart means secondMark == branchStart (impossible since secondMark > branchStart)
-            // d2 == branchStart means secondMark == 2*branchStart
-            // d1 == d2 means secondMark == secondMark - branchStart (impossible unless branchStart == 0)
+            // Check for conflicts
             if (d2 == branchStart || d1 == d2) {
-                continue;  // Conflict with existing differences
+                continue;
             }
 
-            // Setup state for this sub-branch
-            state.marks[0] = 0;
-            state.marks[1] = branchStart;
-            state.marks[2] = secondMark;
-            state.numMarks = 3;
-            clearAllBits(state.usedDiffs);
-            // Set all three differences
-            state.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
-            state.usedDiffs[d1 >> 6] |= (1ULL << (d1 & 63));
-            state.usedDiffs[d2 >> 6] |= (1ULL << (d2 & 63));
+            // Setup first frame for this sub-branch
+            StackFrame& frame0 = stack[0];
+            std::memset(frame0.marks, 0, sizeof(frame0.marks));
+            std::memset(frame0.usedDiffs, 0, sizeof(frame0.usedDiffs));
+            frame0.marks[0] = 0;
+            frame0.marks[1] = branchStart;
+            frame0.marks[2] = secondMark;
+            frame0.numMarks = 3;
+            frame0.nextCandidate = 0;
+            frame0.usedDiffs[branchStart >> 6] |= (1ULL << (branchStart & 63));
+            frame0.usedDiffs[d1 >> 6] |= (1ULL << (d1 & 63));
+            frame0.usedDiffs[d2 >> 6] |= (1ULL << (d2 & 63));
 
-            backtrackMPI(state, n, maxLen, globalBestLen, threadExplored);
+            backtrackIterativeMPI(threadBest, n, maxLen, globalBestLen, threadExplored, stack);
         }
 
         // Accumulate explored count
@@ -226,14 +273,14 @@ static void processBranch(
         totalExplored += threadExplored;
 
         // Merge best solution
-        if (state.bestNumMarks > 0) {
+        if (threadBest.bestNumMarks > 0) {
             #pragma omp critical(merge_branch_best)
             {
-                if (state.bestLen < finalBestLen) {
-                    finalBestLen = state.bestLen;
-                    finalBestNumMarks = state.bestNumMarks;
-                    for (int i = 0; i < state.bestNumMarks; ++i) {
-                        finalBestMarks[i] = state.bestMarks[i];
+                if (threadBest.bestLen < finalBestLen) {
+                    finalBestLen = threadBest.bestLen;
+                    finalBestNumMarks = threadBest.bestNumMarks;
+                    for (int i = 0; i < threadBest.bestNumMarks; ++i) {
+                        finalBestMarks[i] = threadBest.bestMarks[i];
                     }
                 }
             }
@@ -265,6 +312,7 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
 
     // ==========================================================================
     // Single process mode: use OpenMP directly (like search.cpp)
+    // Uses ITERATIVE backtracking with manual stack for performance
     // ==========================================================================
     if (size == 1) {
         int finalBestLen = maxLen + 1;
@@ -273,12 +321,13 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
 
         #pragma omp parallel shared(globalBestLen, finalBestLen, finalBestMarks, finalBestNumMarks)
         {
-            SearchState state{};
-            state.marks[0] = 0;
-            state.numMarks = 1;
-            state.bestLen = maxLen + 1;
-            state.bestNumMarks = 0;
+            ThreadBest threadBest{};
+            threadBest.bestLen = maxLen + 1;
+            threadBest.bestNumMarks = 0;
             long long threadExplored = 0;
+
+            // Thread-local stack
+            alignas(64) StackFrame stack[MAX_MARKS];
 
             #pragma omp for schedule(dynamic, 1)
             for (int firstMark = 1; firstMark <= maxLen; ++firstMark) {
@@ -287,26 +336,29 @@ void searchGolombMPI(int n, int maxLen, GolombRuler& best, HypercubeMPI& hypercu
                     continue;
                 }
 
-                // Setup state for this branch
-                state.marks[0] = 0;
-                state.marks[1] = firstMark;
-                state.numMarks = 2;
-                clearAllBits(state.usedDiffs);
-                state.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
+                // Setup first frame for this branch
+                StackFrame& frame0 = stack[0];
+                std::memset(frame0.marks, 0, sizeof(frame0.marks));
+                std::memset(frame0.usedDiffs, 0, sizeof(frame0.usedDiffs));
+                frame0.marks[0] = 0;
+                frame0.marks[1] = firstMark;
+                frame0.numMarks = 2;
+                frame0.nextCandidate = 0;
+                frame0.usedDiffs[firstMark >> 6] |= (1ULL << (firstMark & 63));
 
-                backtrackMPI(state, n, maxLen, globalBestLen, threadExplored);
+                backtrackIterativeMPI(threadBest, n, maxLen, globalBestLen, threadExplored, stack);
             }
 
             exploredCountMPI.fetch_add(threadExplored, std::memory_order_relaxed);
 
-            if (state.bestNumMarks > 0) {
+            if (threadBest.bestNumMarks > 0) {
                 #pragma omp critical(merge_best_mpi)
                 {
-                    if (state.bestLen < finalBestLen) {
-                        finalBestLen = state.bestLen;
-                        finalBestNumMarks = state.bestNumMarks;
-                        for (int i = 0; i < state.bestNumMarks; ++i) {
-                            finalBestMarks[i] = state.bestMarks[i];
+                    if (threadBest.bestLen < finalBestLen) {
+                        finalBestLen = threadBest.bestLen;
+                        finalBestNumMarks = threadBest.bestNumMarks;
+                        for (int i = 0; i < threadBest.bestNumMarks; ++i) {
+                            finalBestMarks[i] = threadBest.bestMarks[i];
                         }
                     }
                 }
