@@ -24,6 +24,54 @@ const std::string CHANGES = "Master-worker dynamique + OpenMP taskloop";
     const char* MODE_NAME = "PROD";
 #endif
 
+// =============================================================================
+// SINGLE N MODE - Run for a specific n passed as argument
+// =============================================================================
+void runSingleN(int n, HypercubeMPI& hypercube) {
+    int rank = hypercube.rank();
+    int size = hypercube.size();
+    int ompThreads = omp_get_max_threads();
+
+    if (rank == 0) {
+        std::cout << "=============================================================\n";
+        std::cout << "       OPTIMAL GOLOMB RULER - MPI+OPENMP (n=" << n << ")\n";
+        std::cout << "=============================================================\n";
+        std::cout << "MPI Processes: " << size << "\n";
+        std::cout << "OpenMP Threads: " << ompThreads << "\n";
+        std::cout << "Total cores: " << (size * ompThreads) << "\n\n";
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    GolombRuler result;
+    double start = MPI_Wtime();
+    searchGolombMPI(n, DEFAULT_MAX_LEN, result, hypercube);
+    double end = MPI_Wtime();
+    double elapsed = end - start;
+
+    double maxTime;
+    MPI_Reduce(&elapsed, &maxTime, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    long long states = getExploredCountMPI();
+
+    if (rank == 0) {
+        double statesPerSec = states / maxTime;
+
+        std::cout << "n          : " << n << "\n";
+        std::cout << "Length     : " << result.length << "\n";
+        std::cout << "Time       : " << std::fixed << std::setprecision(3) << maxTime << " s\n";
+        std::cout << "States     : " << states << "\n";
+        std::cout << "States/sec : " << std::scientific << std::setprecision(2) << statesPerSec << "\n";
+        std::cout << "\nRuler: { ";
+        for (size_t i = 0; i < result.marks.size(); ++i) {
+            std::cout << result.marks[i];
+            if (i < result.marks.size() - 1) std::cout << ", ";
+        }
+        std::cout << " }\n";
+        std::cout << "=============================================================\n";
+    }
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
 
@@ -31,6 +79,20 @@ int main(int argc, char** argv) {
     int rank = hypercube.rank();
     int size = hypercube.size();
 
+    // Check for single n argument
+    if (argc > 1) {
+        int n = std::atoi(argv[1]);
+        if (n < 2 || n > 24) {
+            if (rank == 0) std::cerr << "ERROR: n must be between 2 and 24\n";
+            MPI_Finalize();
+            return 1;
+        }
+        runSingleN(n, hypercube);
+        MPI_Finalize();
+        return 0;
+    }
+
+    // Default: run full benchmark
     // Logger CSV (seulement rank 0)
     BenchmarkLog* logger = nullptr;
     if (rank == 0) {
