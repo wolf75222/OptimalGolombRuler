@@ -129,7 +129,8 @@ echo "threads,n,version,binding,time_s,length,states,states_per_sec" > "$CSV_FIL
 parse_output() {
     local output="$1"
     local field="$2"
-    echo "$output" | grep -E "^${field}\s*:" | sed -E "s/^${field}\s*:\s*//" | awk '{print $1}'
+    # Use # as sed delimiter to avoid issues with / in field names like "States/sec"
+    echo "$output" | grep -E "^${field}\s*:" | sed -E "s#^${field}\s*:\s*##" | awk '{print $1}'
 }
 
 # Function to run benchmark with proper binding
