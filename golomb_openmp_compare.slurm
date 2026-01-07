@@ -104,7 +104,7 @@ echo "All binaries built successfully!"
 # BENCHMARK CONFIGURATION
 # =============================================================================
 THREADS=(8 16 32 64 96 192)
-GOLOMB_N=(12 13)
+GOLOMB_N=(12 13 14)
 BINDINGS=(close spread)
 
 export OMP_PLACES=cores

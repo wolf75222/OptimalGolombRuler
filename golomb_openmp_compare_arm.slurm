@@ -5,7 +5,7 @@
 #SBATCH --time=0-02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=80
+#SBATCH --cpus-per-task=192
 #SBATCH --mem=0
 #SBATCH --exclusive
 #SBATCH --job-name=golomb_arm_v1v2v3v4v5
@@ -23,11 +23,10 @@
 #   V5: uint64_t ops + prefix-based
 #
 # Architecture cible: romeo ARM nodes
-#   - constraint=arm force les noeuds ARM
-#   - Probablement Ampere Altra ou similaire
+#   - constraint=armgpu force les noeuds ARM
 #
 # Tests:
-#   Threads: 8, 16, 32, 40, 80
+#   Threads: 8, 16, 32, 64, 96, 192
 #   Golomb n: 12, 13
 # =============================================================================
 
@@ -48,7 +47,7 @@ echo "Date: $(date)"
 # Afficher info CPU pour vérifier l'architecture
 echo ""
 echo "CPU Info:"
-lscpu | grep -E "^(Architecture|Model name|CPU\(s\)|Socket|Core|Thread|NUMA)" || true
+lscpu | grep -E "^(Architecture|Model name|CPU\(s\)|Socket|Core|Thread|NUMA|CPU max MHz)" || true
 
 # Travail dans un repertoire scratch dedie
 WORK=/scratch_p/$USER/$SLURM_JOBID
@@ -97,9 +96,8 @@ echo "All binaries built successfully!"
 # =============================================================================
 # BENCHMARK CONFIGURATION
 # =============================================================================
-# Adjust thread counts for ARM (typically fewer cores than x86)
-THREADS=(8 16 32 40 80)
-GOLOMB_N=(12 13)
+THREADS=(8 16 32 64 96 192)
+GOLOMB_N=(12 13 14)
 BINDINGS=(close spread)
 
 export OMP_PLACES=cores
@@ -110,7 +108,7 @@ CSV_FILE="results_arm_v1v2v3v4v5_comparison.csv"
 echo "threads,n,version,binding,time_s,length,states,states_per_sec" > "$CSV_FILE"
 
 # =============================================================================
-# HELPER FUNCTION
+# HELPER FUNCTION - Robust output parsing
 # =============================================================================
 parse_output() {
     local output="$1"
@@ -118,6 +116,7 @@ parse_output() {
     echo "$output" | grep -E "^${field}\s*:" | sed -E "s#^${field}\s*:\s*##" | awk '{print $1}'
 }
 
+# Function to run benchmark with proper binding
 run_bench() {
     local binary="$1"
     local n="$2"
@@ -147,6 +146,7 @@ for bind in "${BINDINGS[@]}"; do
     for t in "${THREADS[@]}"; do
         for n in "${GOLOMB_N[@]}"; do
 
+            # Run all 5 versions
             for ver in V1 V2 V3 V4 V5; do
                 case $ver in
                     V1) binary="./build/golomb_openmp" ;;
@@ -172,7 +172,7 @@ for bind in "${BINDINGS[@]}"; do
 done
 
 # =============================================================================
-# SUMMARY
+# SUMMARY - Best V5 times per configuration
 # =============================================================================
 echo ""
 echo "=========================================="
@@ -201,23 +201,71 @@ for t in "${THREADS[@]}"; do
 done
 
 # =============================================================================
-# ARM vs x86 NOTE
+# BINDING COMPARISON
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "NOTE: Compare with x86 results"
+echo "BINDING COMPARISON - V5 close vs spread"
 echo "=========================================="
-echo "ARM processors may have different characteristics:"
-echo "  - Different cache sizes"
-echo "  - Different branch prediction"
-echo "  - Different SIMD capabilities (NEON vs AVX2)"
-echo "Compare results_arm_*.csv with results_v1v2v3v4v5_comparison.csv"
 echo ""
 
+printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "Threads" "n" "V5-close(s)" "V5-spread(s)" "Winner" "Diff%"
+echo "----------------------------------------------------------------------"
+
+for t in "${THREADS[@]}"; do
+    for n in "${GOLOMB_N[@]}"; do
+        v5_close=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
+        v5_spread=$(grep "^$t,$n,V5,spread," "$CSV_FILE" | cut -d',' -f5)
+
+        if [[ -n "$v5_close" && -n "$v5_spread" && "$v5_close" != "0" && "$v5_spread" != "0" ]]; then
+            if (( $(echo "$v5_close < $v5_spread" | bc -l) )); then
+                winner="close"
+                diff=$(echo "scale=1; 100 * ($v5_spread - $v5_close) / $v5_spread" | bc 2>/dev/null || echo "N/A")
+            else
+                winner="spread"
+                diff=$(echo "scale=1; 100 * ($v5_close - $v5_spread) / $v5_close" | bc 2>/dev/null || echo "N/A")
+            fi
+            printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "$t" "$n" "$v5_close" "$v5_spread" "$winner" "${diff}%"
+        fi
+    done
+done
+
+# =============================================================================
+# NUMA SCALING ANALYSIS
+# =============================================================================
+echo ""
+echo "=========================================="
+echo "NUMA SCALING - V5 (close binding)"
+echo "=========================================="
+echo ""
+
+printf "%-8s %-4s %-12s %-12s %-12s\n" "Threads" "n" "Time(s)" "States/sec" "Efficiency"
+echo "--------------------------------------------------------------"
+
+for n in "${GOLOMB_N[@]}"; do
+    # Get baseline (8 threads)
+    base_time=$(grep "^8,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
+
+    for t in "${THREADS[@]}"; do
+        v5_time=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
+        v5_sps=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f8)
+
+        if [[ -n "$v5_time" && -n "$base_time" && "$v5_time" != "0" ]]; then
+            ideal_speedup=$(echo "scale=2; $t / 8" | bc)
+            actual_speedup=$(echo "scale=2; $base_time / $v5_time" | bc 2>/dev/null || echo "1")
+            efficiency=$(echo "scale=1; 100 * $actual_speedup / $ideal_speedup" | bc 2>/dev/null || echo "N/A")
+            printf "%-8s %-4s %-12s %-12s %-12s\n" "$t" "$n" "$v5_time" "$v5_sps" "${efficiency}%"
+        fi
+    done
+    echo ""
+done
+
+echo ""
 echo "=========================================="
 echo "Results saved to: $CSV_FILE"
 echo "=========================================="
 
+# Copier les resultats vers le repertoire de soumission
 cp "$CSV_FILE" "$SLURM_SUBMIT_DIR/"
 
 echo ""
