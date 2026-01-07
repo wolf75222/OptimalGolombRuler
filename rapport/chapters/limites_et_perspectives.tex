@@ -1,0 +1,240 @@
+\chapter{Limites et perspectives}
+\label{chap:limites}
+
+Ce chapitre analyse les limites rencontrées lors du développement des différentes versions de notre solveur de règles de Golomb, les leçons apprises à chaque étape, et les pistes d'amélioration futures. L'évolution itérative du projet --- de la version séquentielle V1 à la version OpenMP V6 --- illustre comment l'optimisation de code haute performance est un processus d'exploration où certaines intuitions se révèlent fructueuses et d'autres contre-productives.
+
+% =============================================================================
+\section{Évolution des versions et leçons apprises}
+\label{sec:limites:evolution}
+% =============================================================================
+
+\subsection{Versions séquentielles : la base algorithmique}
+
+\paragraph{V1 --- Backtracking itératif avec loop unrolling.}
+La première version implémentait un backtracking classique avec déroulement de boucles. Cette approche établissait une baseline solide mais souffrait d'une limitation fondamentale : la vérification des contraintes de Golomb en $O(k)$ pour chaque candidat, où $k$ est le nombre de marques déjà placées.
+
+\textit{Limite identifiée :} Le coût de vérification des collisions dominait le temps d'exécution, avec plus de 70\% du temps passé dans les boucles de comparaison.
+
+\paragraph{V2 --- BitSet128 avec opération shift.}
+L'insight clé fut de représenter les différences par un bitset et d'utiliser l'opération de décalage pour calculer toutes les nouvelles différences en $O(1)$. Cette transformation a produit un speedup de $5.7\times$ pour $n=13$.
+
+\textit{Leçon apprise :} L'efficacité algorithmique prime sur les micro-optimisations. Un changement de représentation des données peut avoir un impact bien supérieur à n'importe quelle optimisation de bas niveau.
+
+\subsection{Versions OpenMP : scaling et granularité}
+
+\paragraph{V1 --- Parallélisation naïve.}
+La première version OpenMP parallélisait au niveau de la première marque. Cette approche offrait un parallélisme insuffisant : seulement $O(\sqrt{L})$ tâches pour une règle de longueur $L$.
+
+\textit{Limite identifiée :} Déséquilibre de charge massif --- certains threads terminaient en quelques millisecondes tandis que d'autres travaillaient pendant des secondes.
+
+\paragraph{V2 --- Récursif avec bitset<256>.}
+Nous avons tenté d'utiliser \texttt{std::bitset<256>} pour sa flexibilité. Contre-intuitivement, cette version était plus lente que V1 malgré l'optimisation algorithmique.
+
+\textit{Leçon apprise :} L'abstraction de la STL a un coût. Le profilage (43\% du temps dans \texttt{bitset::any()}, 33\% dans \texttt{operator<<=}) a révélé que l'implémentation générique de \texttt{bitset} n'était pas optimale pour notre cas d'usage spécifique de 128 bits.
+
+\paragraph{V3 --- Hybride itératif + bitset.}
+Retour à l'approche itérative tout en conservant le bitset. Amélioration modeste ($1.28\times$ vs V1).
+
+\textit{Limite identifiée :} Le bottleneck restait la boucle interne. Sans granularité suffisante, le scaling était limité.
+
+\paragraph{V4 --- Préfixes + itératif + bitset.}
+Introduction de la génération de préfixes pour créer plus de tâches parallèles. Amélioration significative ($18.96\times$ vs V1 sur 192 threads).
+
+\textit{Leçon apprise :} La granularité du parallélisme est cruciale. En générant des milliers de préfixes au lieu de dizaines de points de départ, l'équilibrage de charge devient naturel.
+
+\paragraph{V5 --- BitSet128 avec uint64\_t.}
+Remplacement de \texttt{bitset<256>} par une structure \texttt{BitSet128} utilisant deux \texttt{uint64\_t}. Cette version a atteint un speedup de $133\times$ vs V1.
+
+\begin{lstlisting}[language=C++, caption={Structure BitSet128 optimisée}]
+struct alignas(16) BitSet128 {
+    uint64_t lo;  // bits 0-63
+    uint64_t hi;  // bits 64-127
+    // Opérations inline sans abstraction
+};
+\end{lstlisting}
+
+\textit{Leçon apprise :} Pour les structures de données critiques, une implémentation sur mesure surpasse les abstractions génériques. Les 16 octets de \texttt{BitSet128} tiennent dans deux registres, éliminant tout accès mémoire.
+
+\paragraph{V6 --- Tentative d'optimisation manuelle supplémentaire.}
+Fort des succès précédents, nous avons tenté des optimisations manuelles supplémentaires ciblant l'architecture AMD EPYC de Romeo : préchargement cache (\texttt{prefetch}), intrinsèques SIMD, réorganisation des données pour l'alignement vectoriel.
+
+\textit{Résultat surprenant :} V6 était \textbf{26\% plus lente} que V5 ($0.435$ s vs $0.323$ s pour $n=13$ sur 192 threads).
+
+\textit{Leçon fondamentale :} Le compilateur moderne (GCC avec \texttt{-O3 -march=native}) optimise souvent mieux que le programmeur. Nos tentatives d'optimisation manuelle ont interféré avec les optimisations automatiques du compilateur (inlining, vectorisation, scheduling d'instructions).
+
+\begin{result}
+La V6 illustre la loi des rendements décroissants : au-delà d'un certain niveau d'optimisation, les tentatives manuelles peuvent être contre-productives. Le compilateur, connaissant intimement l'architecture cible, produit souvent un code plus efficace que les optimisations ``à la main''.
+\end{result}
+
+\subsection{Versions MPI : distribution et communication}
+
+\paragraph{V1/V2 --- Topologie hypercube.}
+L'implémentation hypercube offrait des communications $O(\log P)$ mais imposait une contrainte : le nombre de processus devait être une puissance de 2.
+
+\textit{Limite identifiée :} Rigidité du schéma de communication et complexité d'implémentation.
+
+\paragraph{V3 --- MPI\_Allreduce standard.}
+Simplification avec \texttt{MPI\_Allreduce} qui fonctionne avec n'importe quel nombre de processus et bénéficie des optimisations MPI internes.
+
+\textit{Leçon apprise :} Pour des communications peu fréquentes (propagation du bound), les primitives MPI optimisées sont préférables aux topologies personnalisées.
+
+% =============================================================================
+\section{Limites actuelles de l'implémentation}
+\label{sec:limites:actuelles}
+% =============================================================================
+
+\subsection{Bornes et heuristiques d'exploration}
+
+Notre implémentation utilise la borne inférieure de Golomb $\sum_{i=1}^{r} i = r(r+1)/2$ pour l'élagage. Cette borne, bien que correcte, n'est pas serrée.
+
+\paragraph{Bornes plus fortes connues.}
+Des bornes plus sophistiquées existent dans la littérature :
+\begin{itemize}
+    \item \textbf{Borne de Erdős-Turán} : $L(n) \geq n^2 - n$
+    \item \textbf{Bornes probabilistes} : Issues de la théorie des codes
+    \item \textbf{Bornes calculées} : Obtenues par programmation linéaire
+\end{itemize}
+
+L'intégration de ces bornes pourrait réduire significativement l'espace de recherche.
+
+\paragraph{Heuristiques d'ordre d'exploration.}
+Actuellement, nous explorons les positions candidates dans l'ordre croissant. Des heuristiques plus sophistiquées pourraient améliorer la découverte précoce de bonnes solutions :
+\begin{itemize}
+    \item Exploration ``middle-out'' (commencer par le milieu)
+    \item Heuristiques basées sur les densités de différences
+    \item Apprentissage des patterns à partir des solutions connues
+\end{itemize}
+
+\subsection{Équilibrage de charge}
+
+\paragraph{Partitionnement statique des préfixes.}
+Notre approche génère tous les préfixes au départ et les distribue statiquement. Pour des $n$ élevés, certains préfixes peuvent représenter des sous-arbres beaucoup plus grands que d'autres.
+
+\paragraph{Work stealing absente.}
+OpenMP offre des \texttt{tasks} avec vol de travail automatique, que nous n'utilisons pas. Cette fonctionnalité permettrait un rééquilibrage dynamique sans surcoût de synchronisation explicite.
+
+\begin{lstlisting}[language=C++, caption={Alternative avec OpenMP tasks (non implémentée)}]
+#pragma omp parallel
+#pragma omp single
+{
+    for (auto& prefix : prefixes) {
+        #pragma omp task
+        {
+            explorePrefix(prefix);
+        }
+    }
+}
+\end{lstlisting}
+
+\paragraph{MPI : partitionnement fixe.}
+La version MPI partitionne les préfixes entre processus au démarrage. Un déséquilibre initial persiste tout au long de l'exécution sans mécanisme de redistribution.
+
+\subsection{Limitations mémoire et bitset}
+
+\paragraph{Limite à 127 marques.}
+La structure \texttt{BitSet128} supporte des règles de longueur maximale 127. Pour $n > 14$, les règles optimales dépassent cette limite (ex: $L^*(15) \approx 151$).
+
+\textit{Solution envisagée :} Extension à \texttt{BitSet256} (4× \texttt{uint64\_t}) ou utilisation de SIMD 256-bit (AVX2).
+
+\paragraph{Vectorisation non exploitée.}
+Les processeurs modernes offrent des instructions SIMD (SSE, AVX, AVX-512) permettant de traiter plusieurs opérations en parallèle. Notre \texttt{BitSet128} pourrait bénéficier de :
+\begin{itemize}
+    \item \texttt{\_mm\_and\_si128} pour l'AND vectoriel
+    \item \texttt{\_mm\_or\_si128} pour l'OR vectoriel
+    \item \texttt{\_mm\_slli\_epi64} pour le shift vectoriel
+\end{itemize}
+
+Cependant, comme l'a montré l'échec de V6, ces optimisations nécessitent une analyse minutieuse pour ne pas dégrader les performances.
+
+% =============================================================================
+\section{Outillage de profilage}
+\label{sec:limites:profiling}
+% =============================================================================
+
+\subsection{Limitations sur cluster HPC}
+
+Le profilage sur le cluster Romeo présente des défis spécifiques :
+
+\paragraph{\texttt{perf} Linux.}
+L'outil standard de profilage Linux nécessite des permissions élevées souvent indisponibles sur les nœuds de calcul partagés.
+
+\paragraph{Compteurs hardware.}
+L'accès aux Performance Monitoring Units (PMU) est généralement restreint, limitant l'analyse des cache misses, branch mispredictions, etc.
+
+\paragraph{Overhead de l'instrumentation.}
+Les outils comme Valgrind ou Intel VTune introduisent un overhead significatif, rendant les mesures de code hautement optimisé peu représentatives.
+
+\subsection{Solutions adoptées}
+
+\paragraph{Very Sleepy (Windows).}
+Pour le développement local, nous avons utilisé Very Sleepy, un profileur sampling léger qui ne nécessite pas d'instrumentation du code.
+
+\paragraph{Instrumentation manuelle.}
+Pour les benchmarks précis, nous avons implémenté notre propre instrumentation :
+\begin{itemize}
+    \item Compteurs d'états explorés (\texttt{atomic<long long>})
+    \item Mesure de temps via \texttt{std::chrono::high\_resolution\_clock}
+    \item Export CSV pour analyse post-mortem
+\end{itemize}
+
+\paragraph{Benchmarks SLURM reproductibles.}
+Les scripts SLURM permettent des benchmarks reproductibles avec isolation complète (\texttt{--exclusive}) et contrôle du binding CPU.
+
+% =============================================================================
+\section{Perspectives d'amélioration}
+\label{sec:limites:perspectives}
+% =============================================================================
+
+\subsection{Court terme : optimisations incrémentales}
+
+\paragraph{Work stealing avec OpenMP tasks.}
+Remplacement du \texttt{parallel for} par des tâches avec dépendances permettrait un équilibrage dynamique sans surcoût de gestion manuelle.
+
+\paragraph{Granularité adaptative.}
+Ajustement automatique de la profondeur de préfixe en fonction de $n$ et du nombre de threads, visant un ratio optimal tâches/threads.
+
+\paragraph{BitSet256 pour $n > 14$.}
+Extension naturelle pour supporter des règles plus longues, avec possibilité d'utiliser AVX2 pour les opérations vectorielles.
+
+\subsection{Moyen terme : algorithmes avancés}
+
+\paragraph{Bornes améliorées.}
+Intégration de bornes plus serrées issues de la recherche opérationnelle, potentiellement calculées par programmation linéaire au démarrage.
+
+\paragraph{Symétries supplémentaires.}
+Au-delà de la symétrie miroir déjà exploitée, d'autres symétries du problème pourraient être identifiées et éliminées.
+
+\paragraph{Recherche hybride.}
+Combinaison du backtracking exact avec des heuristiques de recherche locale pour trouver rapidement de bonnes bornes supérieures.
+
+\subsection{Long terme : approches alternatives}
+
+\paragraph{Algorithmes distribués adaptatifs.}
+Schémas MPI avec redistribution dynamique de travail, inspirés des frameworks de type MapReduce.
+
+\paragraph{Calcul GPU.}
+Le parallélisme massif des GPUs (milliers de cœurs) pourrait accélérer l'exploration, bien que la nature irrégulière du backtracking pose des défis d'implémentation.
+
+\paragraph{Méthodes de satisfaction de contraintes.}
+Formulation du problème comme SAT ou CSP, permettant d'utiliser des solveurs optimisés et potentiellement de prouver l'optimalité plus efficacement.
+
+% =============================================================================
+\section{Conclusion du chapitre}
+\label{sec:limites:conclusion}
+% =============================================================================
+
+L'évolution de notre solveur illustre plusieurs principes fondamentaux de l'optimisation haute performance :
+
+\begin{enumerate}
+    \item \textbf{L'algorithme d'abord} : Le passage de $O(k)$ à $O(1)$ pour la vérification des contraintes a apporté le gain le plus significatif ($5.7\times$).
+
+    \item \textbf{La granularité compte} : Une parallélisation avec suffisamment de tâches permet un équilibrage naturel de la charge.
+
+    \item \textbf{Les abstractions ont un coût} : Pour le code critique, les structures de données sur mesure surpassent les conteneurs génériques.
+
+    \item \textbf{Le compilateur est notre allié} : Les tentatives d'optimisation manuelle au-delà de ce que le compilateur peut déduire sont souvent contre-productives (V6 < V5).
+
+    \item \textbf{Mesurer, toujours mesurer} : Sans profilage rigoureux, les optimisations sont des suppositions.
+\end{enumerate}
+
+Ces leçons s'appliquent bien au-delà du problème des règles de Golomb, à tout projet d'optimisation de code haute performance.

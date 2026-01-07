@@ -1,0 +1,86 @@
+tail -n 11000 job_seq.259746.out
+Loading x86_64 (no gpu) environment
+Environment loaded. Spack available.
+==========================================
+Golomb Ruler Sequential Comparison: V1 vs V2
+==========================================
+NodeList: romeo-c021
+Date: Wed Jan  7 21:21:44 CET 2026
+
+CPU Info:
+Model name:                           AMD EPYC 9654 96-Core Processor
+Building in: /scratch_p/rmdraux/259746/OptimalGolombRuler
+
+==========================================
+Building Sequential versions
+==========================================
+rm -rf build
+Using ARCH_FLAGS: -march=native -mtune=native
+Building sequential V1...
+mkdir -p build
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -Iinclude -Wall -Wextra -DNDEBUG -c -o build/seq_search_sequential.o src/search_sequential.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -Iinclude -Wall -Wextra -DNDEBUG -c -o build/seq_main_sequential.o src/main_sequential.cpp
+g++ -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_sequential build/seq_search_sequential.o build/seq_main_sequential.o
+Building sequential V2...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -Iinclude -Wall -Wextra -DNDEBUG -c -o build/seq2_search_sequential_v2.o src/search_sequential_v2.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -Iinclude -Wall -Wextra -DNDEBUG -c -o build/seq2_main_sequential_v2.o src/main_sequential_v2.cpp
+g++ -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_sequential_v2 build/seq2_search_sequential_v2.o build/seq2_main_sequential_v2.o
+
+Contents of build/:
+-rwxr-xr-x 1 rmdraux rmdraux 49K Jan  7 21:21 build/golomb_sequential
+-rwxr-xr-x 1 rmdraux rmdraux 49K Jan  7 21:21 build/golomb_sequential_v2
+All binaries built successfully!
+
+==========================================
+Starting benchmarks...
+==========================================
+
+n    Version  Time(s)      Length   States          States/sec     
+--------------------------------------------------------------------
+Running V1 for n=9...
+9    V1       0.014        44       521716          3.71e+07       
+Running V2 for n=9...
+9    V2       0.004        44       289178          7.78e+07       
+
+Running V1 for n=10...
+10   V1       0.121        55       3934951         3.25e+07       
+Running V2 for n=10...
+10   V2       0.028        55       2047267         7.28e+07       
+
+Running V1 for n=11...
+11   V1       2.432        72       69449674        2.86e+07       
+Running V2 for n=11...
+11   V2       0.520        72       35871692        6.90e+07       
+
+Running V1 for n=12...
+12   V1       20.742       85       545517652       2.63e+07       
+Running V2 for n=12...
+12   V2       4.051        85       264788630       6.54e+07       
+
+Running V1 for n=13...
+13   V1       395.538      106      9002421587      2.28e+07       
+Running V2 for n=13...
+13   V2       68.911       106      4251895005      6.17e+07       
+
+
+==========================================
+SUMMARY - V1 vs V2 Speedup
+==========================================
+
+n    V1(s)        V2(s)        Speedup    V1 St/s      V2 St/s     
+----------------------------------------------------------------------
+9    0.014        0.004        3.50x      3.71e+07     7.78e+07    
+10   0.121        0.028        4.32x      3.25e+07     7.28e+07    
+11   2.432        0.520        4.67x      2.86e+07     6.90e+07    
+12   20.742       4.051        5.12x      2.63e+07     6.54e+07    
+13   395.538      68.911       5.73x      2.28e+07     6.17e+07    
+
+==========================================
+Results saved to: results_sequential_v1v2_comparison.csv
+==========================================
+
+==========================================
+All benchmarks completed!
+==========================================
+End time: Wed Jan  7 21:30:00 CET 2026
+

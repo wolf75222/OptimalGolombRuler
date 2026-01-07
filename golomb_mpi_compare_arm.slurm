@@ -3,7 +3,7 @@
 #SBATCH --partition=short
 #SBATCH --constraint=armgpu
 #SBATCH --time=0-02:00:00
-#SBATCH --nodes=4
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=0
@@ -22,7 +22,7 @@
 #
 # Architecture cible: romeo ARM nodes
 #   - constraint=armgpu force les noeuds ARM
-#   - 4 nodes × 192 CPUs
+#   - 2 nodes × 192 CPUs
 #
 # Tests:
 #   MPI procs: 1, 2, 4
@@ -99,7 +99,7 @@ echo "All MPI binaries built successfully!"
 # =============================================================================
 # MPI processes must be power of 2 for V1/V2 (hypercube)
 # V3 works with any number
-MPI_PROCS=(1 2 4 8 16 32)
+MPI_PROCS=(1 2 4 8 16)
 THREADS_PER_PROC=(1 2 4 8 12 24)
 GOLOMB_N=(12 13 14)
 

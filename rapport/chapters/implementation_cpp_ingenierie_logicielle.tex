@@ -1,0 +1,531 @@
+\chapter{Implémentation C++ et ingénierie logicielle}
+
+\epigraph{\textit{``Any fool can write code that a computer can understand. Good programmers write code that humans can understand.''}}{--- Martin Fowler}
+
+\section{Organisation du dépôt}
+
+Le projet est organisé selon une architecture modulaire séparant clairement les interfaces, les implémentations et les points d'entrée.
+
+\subsection{Structure des répertoires}
+
+\begin{lstlisting}[language=bash, caption={Arborescence du projet}]
+OptimalGolombRuler/
+├── include/               # Headers (interfaces)
+│   ├── golomb.hpp            # Structure GolombRuler
+│   ├── search.hpp            # Interface OpenMP V1
+│   ├── search_v2.hpp         # Interface OpenMP V2
+│   ├── search_v3.hpp         # Interface OpenMP V3
+│   ├── search_v4.hpp         # Interface OpenMP V4
+│   ├── search_v5.hpp         # Interface OpenMP V5
+│   ├── search_sequential.hpp # Interface Sequential V1
+│   ├── search_sequential_v2.hpp # Interface Sequential V2
+│   ├── search_mpi.hpp        # Interface MPI V1
+│   ├── search_mpi_v2.hpp     # Interface MPI V2
+│   ├── search_mpi_v3.hpp     # Interface MPI V3
+│   ├── hypercube.hpp         # Topologie hypercube MPI
+│   └── benchmark_log.hpp     # Export CSV benchmarks
+├── src/                   # Sources (implementations)
+│   ├── search.cpp            # OpenMP V1
+│   ├── search_v2.cpp         # OpenMP V2
+│   ├── search_v3.cpp         # OpenMP V3
+│   ├── search_v4.cpp         # OpenMP V4
+│   ├── search_v5.cpp         # OpenMP V5
+│   ├── search_sequential.cpp # Sequential V1
+│   ├── search_sequential_v2.cpp # Sequential V2
+│   ├── search_mpi.cpp        # MPI V1
+│   ├── search_mpi_v2.cpp     # MPI V2
+│   ├── search_mpi_v3.cpp     # MPI V3
+│   ├── main_*.cpp            # Points d'entree
+│   └── test_correctness.cpp  # Tests de validation
+├── scripts/               # Scripts Windows (MSVC)
+├── benchmarks/            # Resultats CSV
+├── *.slurm                # Scripts SLURM (HPC Romeo)
+└── Makefile               # Build Linux/Unix
+\end{lstlisting}
+
+\subsection{Modules et responsabilités}
+
+Le tableau \ref{tab:modules} détaille la responsabilité de chaque module :
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Module} & \textbf{Responsabilité} \\
+\midrule
+\texttt{golomb.hpp} & Structure de données \texttt{GolombRuler} : stockage des marques, calcul de longueur, validation statique \texttt{isValid()} \\
+\midrule
+\texttt{search*.hpp/cpp} & Algorithmes de recherche : backtracking, pruning, gestion de la pile. Chaque version (V1-V5) représente une itération d'optimisation \\
+\midrule
+\texttt{search\_mpi*.hpp/cpp} & Versions distribuées avec MPI : distribution des préfixes, synchronisation des bornes via hypercube ou \texttt{MPI\_Allreduce} \\
+\midrule
+\texttt{hypercube.hpp} & Topologie de communication MPI en hypercube : calcul des voisins, diffusion en $O(\log P)$ \\
+\midrule
+\texttt{benchmark\_log.hpp} & Logging des résultats en CSV : timestamp, paramètres, métriques de performance \\
+\midrule
+\texttt{main\_*.cpp} & Points d'entrée : parsing des arguments, initialisation, appel à la recherche, affichage des résultats \\
+\midrule
+\texttt{test\_correctness.cpp} & Suite de tests : validation contre solutions connues, tests de structure, tests de reproductibilité \\
+\bottomrule
+\end{tabularx}
+\caption{Modules du projet et leurs responsabilités}
+\label{tab:modules}
+\end{table}
+
+\subsection{Conventions de nommage des versions}
+
+Les différentes versions sont identifiées par un suffixe numérique reflétant l'évolution des optimisations :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Catégorie} & \textbf{Version} & \textbf{Caractéristiques} \\
+\midrule
+\multirow{2}{*}{Sequential} & V1 & Itératif, loop unrolling 4x \\
+ & V2 & BitSet128 shift O(1) \\
+\midrule
+\multirow{5}{*}{OpenMP} & V1 & Itératif + loop unrolling \\
+ & V2 & Récursif + bitset<256> shift \\
+ & V3 & Hybride itératif + bitset shift \\
+ & V4 & Génération de préfixes + bitset shift \\
+ & V5 & BitSet128 (2$\times$uint64\_t) + préfixes \\
+\midrule
+\multirow{3}{*}{MPI+OpenMP} & V1 & Hypercube + loop unrolling \\
+ & V2 & Hypercube + BitSet128 shift \\
+ & V3 & MPI\_Allreduce + BitSet128 \\
+\bottomrule
+\end{tabular}
+\caption{Versions implémentées et leurs optimisations}
+\label{tab:versions}
+\end{table}
+
+\subsection{Structure \texttt{GolombRuler}}
+
+La structure centrale du projet encapsule une règle de Golomb :
+
+\begin{lstlisting}[language=C++, caption={Structure GolombRuler (golomb.hpp)}]
+struct GolombRuler {
+    std::vector<int> marks;  // Positions des marques
+    int length = 0;          // Longueur (= derniere marque)
+
+    // Validation statique
+    static inline bool isValid(const std::vector<int>& marks) {
+        std::bitset<MAX_DIFF> seen;
+        for (size_t i = 0; i < marks.size(); ++i) {
+            for (size_t j = i + 1; j < marks.size(); ++j) {
+                const int d = marks[j] - marks[i];
+                if (seen[d]) return false;  // Collision
+                seen.set(d);
+            }
+        }
+        return true;
+    }
+
+    void computeLength() noexcept {
+        length = marks.empty() ? 0 : marks.back();
+    }
+};
+\end{lstlisting}
+
+\section{Prérequis, compilation et exécution}
+
+\subsection{Prérequis logiciels}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Composant} & \textbf{Linux/Unix} & \textbf{Windows} \\
+\midrule
+Compilateur C++ & g++ 10+ ou clang++ 12+ & MSVC 2019+ \\
+Standard C++ & C++20 & C++20 \\
+OpenMP & libgomp (inclus avec g++) & Supporté nativement \\
+MPI & OpenMPI ou MPICH & MS-MPI \\
+Make & GNU Make & Optionnel (scripts .bat) \\
+\bottomrule
+\end{tabular}
+\caption{Prérequis selon la plateforme}
+\label{tab:prerequisites}
+\end{table}
+
+\subsection{Compilation sous Linux/Unix (Makefile)}
+
+Le \texttt{Makefile} fournit des cibles pour chaque version :
+
+\begin{lstlisting}[language=bash, caption={Commandes de compilation Linux}]
+# Versions sequentielles
+make sequential           # V1 (loop unrolling)
+make sequential_v2        # V2 (BitSet128 shift)
+
+# Versions OpenMP
+make openmp               # V1
+make openmp_v2            # V2
+make openmp_v3            # V3
+make openmp_v4            # V4
+make openmp_v5            # V5 (recommande)
+
+# Versions MPI+OpenMP
+make mpi                  # V1 (hypercube)
+make mpi_v2               # V2 (hypercube + BitSet128)
+make mpi_v3               # V3 (allreduce + BitSet128)
+
+# Modes developpement (tailles reduites)
+make sequential-dev
+make openmp-dev
+make mpi-dev
+
+# Nettoyage
+make clean
+\end{lstlisting}
+
+Les flags d'optimisation appliqués sont :
+
+\begin{lstlisting}[language=bash, caption={Flags de compilation}]
+OPTFLAGS = -O3 -march=native -mtune=native \
+           -funroll-loops -fomit-frame-pointer -flto
+CXXFLAGS = -std=c++20 $(OPTFLAGS) -fopenmp -I$(INC_DIR) \
+           -Wall -Wextra -DNDEBUG
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{-O3} : optimisations agressives
+    \item \texttt{-march=native} : instructions spécifiques au CPU hôte
+    \item \texttt{-funroll-loops} : déroulage automatique des boucles
+    \item \texttt{-flto} : optimisation à l'édition de liens (LTO)
+    \item \texttt{-DNDEBUG} : désactive les assertions (mode production)
+\end{itemize}
+
+\subsection{Compilation sous Windows (scripts MSVC)}
+
+Des scripts batch sont fournis pour la compilation avec MSVC :
+
+\begin{lstlisting}[language=bash, caption={Scripts de compilation Windows}]
+scripts\build_sequential.bat     # Sequential V1
+scripts\build_sequential_v2.bat  # Sequential V2
+scripts\build_openmp.bat         # OpenMP V1
+scripts\build_openmp_v5.bat      # OpenMP V5
+scripts\build_mpi.bat            # MPI V1
+scripts\clean.bat                # Nettoyage
+\end{lstlisting}
+
+\subsection{Exécution}
+
+\subsubsection{Versions séquentielles et OpenMP}
+
+\begin{lstlisting}[language=bash, caption={Exécution locale}]
+# Sequential
+./build/golomb_sequential <n>
+./build/golomb_sequential_v2 <n>
+
+# OpenMP (utilise tous les cores)
+./build/golomb_openmp_v5 <n> [prefix_depth]
+
+# Controler le nombre de threads
+OMP_NUM_THREADS=8 ./build/golomb_openmp_v5 13
+\end{lstlisting}
+
+Les arguments sont :
+\begin{itemize}
+    \item \texttt{<n>} : nombre de marques (obligatoire, entre 2 et 20)
+    \item \texttt{[prefix\_depth]} : profondeur de préfixe pour la parallélisation (optionnel, auto par défaut)
+\end{itemize}
+
+\subsubsection{Versions MPI}
+
+\begin{lstlisting}[language=bash, caption={Exécution MPI}]
+# V1 et V2 : nombre de processus = puissance de 2 (hypercube)
+mpiexec -n 4 ./build/golomb_mpi_v2 13
+mpiexec -n 8 ./build/golomb_mpi_v2 13
+
+# V3 : tout nombre de processus
+mpiexec -n 6 ./build/golomb_mpi_v3 13
+\end{lstlisting}
+
+\subsubsection{Exécution sur HPC (SLURM)}
+
+Des scripts SLURM sont fournis pour le supercalculateur Romeo :
+
+\begin{lstlisting}[language=bash, caption={Soumission de jobs SLURM}]
+# Comparaison OpenMP (x86 et ARM)
+sbatch golomb_openmp_compare.slurm
+sbatch golomb_openmp_compare_arm.slurm
+
+# Comparaison MPI
+sbatch golomb_mpi_compare.slurm
+
+# Comparaison sequentielle
+sbatch golomb_sequential_compare.slurm
+\end{lstlisting}
+
+\section{Format des sorties et traçage benchmark}
+
+\subsection{Sortie console standard}
+
+L'exécution produit une sortie formatée sur la console :
+
+\begin{lstlisting}[language=bash, caption={Exemple de sortie console}]
+=============================================================
+       OPTIMAL GOLOMB RULER - OPENMP V5 (n=13)
+=============================================================
+Algorithm: uint64_t ops + prefix-based + iterative
+Threads: 12
+Prefix depth: auto
+
+n          : 13
+Length     : 106
+Time       : 45.234 s
+States     : 1234567890
+States/sec : 2.73e+07
+Valid      : YES
+
+Ruler: { 0, 2, 5, 25, 37, 43, 59, 70, 85, 89, 98, 99, 106 }
+=============================================================
+\end{lstlisting}
+
+\subsection{Format CSV pour benchmarks}
+
+La classe \texttt{BenchmarkLog} génère des fichiers CSV dans le répertoire \texttt{benchmarks/}. Deux formats sont utilisés selon le type de parallélisation.
+
+\subsubsection{Format OpenMP}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Champ} & \textbf{Description} \\
+\midrule
+\texttt{timestamp} & Date et heure (YYYY-MM-DD HH:MM:SS) \\
+\texttt{date} & Date seule (YYYY-MM-DD) \\
+\texttt{n} & Nombre de marques \\
+\texttt{threads} & Nombre de threads OpenMP \\
+\texttt{length} & Longueur de la règle trouvée \\
+\texttt{time\_s} & Temps d'exécution en secondes \\
+\texttt{speedup} & Accélération par rapport à 1 thread \\
+\texttt{efficiency\_pct} & Efficacité parallèle (\%) \\
+\texttt{states} & Nombre d'états explorés \\
+\texttt{changes} & Notes/commentaires (optionnel) \\
+\bottomrule
+\end{tabular}
+\caption{Champs du fichier CSV OpenMP}
+\label{tab:csv_openmp}
+\end{table}
+
+Exemple de ligne :
+\begin{lstlisting}[basicstyle=\tiny\ttfamily]
+2025-01-15 14:30:22,2025-01-15,13,12,106,45.23400,8.45,70.4,1234567890,"V5 prefix-based"
+\end{lstlisting}
+
+\subsubsection{Format MPI}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Champ} & \textbf{Description} \\
+\midrule
+\texttt{timestamp} & Date et heure \\
+\texttt{date} & Date seule \\
+\texttt{n} & Nombre de marques \\
+\texttt{mpi\_procs} & Nombre de processus MPI \\
+\texttt{omp\_threads} & Threads OpenMP par processus \\
+\texttt{length} & Longueur trouvée \\
+\texttt{time\_s} & Temps d'exécution \\
+\texttt{speedup} & Accélération \\
+\texttt{efficiency\_pct} & Efficacité \\
+\texttt{states} & États explorés \\
+\texttt{changes} & Notes \\
+\bottomrule
+\end{tabular}
+\caption{Champs du fichier CSV MPI}
+\label{tab:csv_mpi}
+\end{table}
+
+\subsubsection{Utilisation de BenchmarkLog}
+
+\begin{lstlisting}[language=C++, caption={Utilisation de BenchmarkLog}]
+#include "benchmark_log.hpp"
+
+// Creation du logger
+BenchmarkLog log("benchmarks", "openmp");
+
+// Enregistrement d'un resultat OpenMP
+log.logOpenMP(
+    n,              // Nombre de marques
+    numThreads,     // Threads utilises
+    best.length,    // Longueur trouvee
+    elapsed,        // Temps en secondes
+    speedup,        // T_1 / T_p
+    efficiency,     // speedup / p * 100
+    exploredStates, // Etats explores
+    "V5 BitSet128"  // Commentaire
+);
+
+// Enregistrement d'un resultat MPI
+log.logMPI(
+    n, mpiProcs, ompThreads, length,
+    time, speedup, efficiency, states, "V3 Allreduce"
+);
+\end{lstlisting}
+
+\subsection{Emplacement des fichiers}
+
+\begin{lstlisting}[language=bash]
+benchmarks/
+├── openmp_benchmark.csv      # Resultats OpenMP
+├── mpi_benchmark.csv         # Resultats MPI
+├── sequential_benchmark.csv  # Resultats sequentiels
+└── compare_v1_v2.csv         # Comparaisons de versions
+\end{lstlisting}
+
+\section{Stratégie de validation}
+
+La validation de l'implémentation est essentielle pour garantir la correction des résultats. Notre stratégie repose sur plusieurs niveaux de vérification.
+
+\subsection{Tests sur petits $n$}
+
+Pour les petites valeurs de $n$ ($n \leq 12$), l'exécution est rapide et permet une validation systématique :
+
+\begin{lstlisting}[language=C++, caption={Référentiel des solutions optimales connues}]
+const std::vector<KnownOptimal> KNOWN_OPTIMALS = {
+    {2,  1,   {0, 1}},
+    {3,  3,   {0, 1, 3}},
+    {4,  6,   {0, 1, 4, 6}},
+    {5,  11,  {0, 1, 4, 9, 11}},
+    {6,  17,  {0, 1, 4, 10, 12, 17}},
+    {7,  25,  {0, 1, 4, 10, 18, 23, 25}},
+    {8,  34,  {0, 1, 4, 9, 15, 22, 32, 34}},
+    {9,  44,  {0, 1, 5, 12, 25, 27, 35, 41, 44}},
+    {10, 55,  {0, 1, 6, 10, 23, 26, 34, 41, 53, 55}},
+    {11, 72,  {0, 1, 4, 13, 28, 33, 47, 54, 64, 70, 72}},
+    {12, 85,  {0, 2, 6, 24, 29, 40, 43, 55, 68, 75, 76, 85}},
+};
+\end{lstlisting}
+
+\subsection{Suite de tests}
+
+Le fichier \texttt{test\_correctness.cpp} implémente une suite de tests couvrant plusieurs aspects :
+
+\begin{enumerate}
+    \item \textbf{Tests d'optimalité} : vérification que la longueur trouvée correspond à $L^*(n)$ connu
+    \item \textbf{Tests de structure} : vérification des propriétés de la règle (premier élément = 0, ordre croissant, longueur cohérente)
+    \item \textbf{Tests d'unicité} : vérification que toutes les différences sont distinctes
+    \item \textbf{Tests de reproductibilité} : exécutions multiples donnant le même résultat
+    \item \textbf{Tests aux limites} : cas $n=2$, bornes insuffisantes, etc.
+\end{enumerate}
+
+\begin{lstlisting}[language=C++, caption={Fonctions de validation}]
+// Verification de l'unicite des differences
+bool verifyUniqueDifferences(const std::vector<int>& marks) {
+    std::set<int> differences;
+    for (size_t i = 0; i < marks.size(); ++i) {
+        for (size_t j = i + 1; j < marks.size(); ++j) {
+            int d = marks[j] - marks[i];
+            if (differences.count(d)) return false;
+            differences.insert(d);
+        }
+    }
+    return true;
+}
+
+// Verification de la structure
+bool verifyRulerStructure(const GolombRuler& ruler, int expectedN) {
+    if (ruler.marks.size() != expectedN) return false;
+    if (ruler.marks[0] != 0) return false;
+    for (size_t i = 1; i < ruler.marks.size(); ++i) {
+        if (ruler.marks[i] <= ruler.marks[i-1]) return false;
+    }
+    if (ruler.length != ruler.marks.back()) return false;
+    return true;
+}
+\end{lstlisting}
+
+\subsection{Exécution des tests}
+
+\begin{lstlisting}[language=bash, caption={Lancement des tests}]
+# Compilation et execution des tests
+make test
+
+# Ou manuellement
+./build/golomb_sequential_dev
+\end{lstlisting}
+
+Sortie typique :
+\begin{lstlisting}[basicstyle=\tiny\ttfamily]
+============================================
+  Golomb Ruler Correctness Test Suite
+  CSAPP Principle #10: Safety Verification
+============================================
+
+=== Testing Known Optimal Solutions ===
+Testing n=2... PASSED (L=1)
+Testing n=3... PASSED (L=3)
+Testing n=4... PASSED (L=6)
+Testing n=5... PASSED (L=11)
+Testing n=6... PASSED (L=17)
+Testing n=7... PASSED (L=25)
+Testing n=8... PASSED (L=34)
+
+=== Testing Edge Cases ===
+Testing n=2 (minimal)... PASSED
+Testing n=3... PASSED (L=3)
+Testing tight bound (n=6, maxLen=17)... PASSED
+Testing insufficient bound (n=6, maxLen=15)... PASSED (correctly bounded)
+
+=== Testing Reproducibility ===
+Testing multiple runs for n=8... PASSED (all found L=34)
+
+=== Testing Validation Method ===
+Testing valid ruler... PASSED
+Testing invalid ruler (duplicate diff)... PASSED (correctly rejected)
+
+============================================
+  ALL TESTS PASSED
+============================================
+\end{lstlisting}
+
+\subsection{Critères de validation}
+
+Une implémentation est considérée \textbf{valide} si et seulement si :
+
+\begin{defi}{Critères de validation}
+\begin{enumerate}
+    \item Pour tout $n$ testé : $L_{trouvée}(n) = L^*(n)$ (optimalité)
+    \item La règle retournée satisfait : \texttt{GolombRuler::isValid(marks) == true}
+    \item La structure est cohérente : $marks[0] = 0$, ordre croissant, $length = marks.back()$
+    \item Les résultats sont reproductibles entre exécutions
+\end{enumerate}
+\end{defi}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm,
+    box/.style={rectangle, draw=burgundy, fill=burgundy!10, rounded corners, minimum width=3cm, minimum height=0.8cm, align=center},
+    arrow/.style={->, thick}
+]
+    \node[box] (input) {Entrée : $n$, $maxLen$};
+    \node[box, below=of input] (search) {Algorithme de recherche};
+    \node[box, below=of search] (result) {Résultat : règle $G$};
+
+    \node[box, right=2cm of result] (check1) {$L(G) = L^*(n)$ ?};
+    \node[box, below=of check1] (check2) {isValid($G$) ?};
+    \node[box, below=of check2] (check3) {Structure OK ?};
+
+    \node[draw=green!60!black, fill=green!20, rounded corners, right=1.5cm of check2] (valid) {VALIDE};
+    \node[draw=red!60, fill=red!20, rounded corners, below=0.5cm of check3] (invalid) {INVALIDE};
+
+    \draw[arrow] (input) -- (search);
+    \draw[arrow] (search) -- (result);
+    \draw[arrow] (result) -- (check1);
+    \draw[arrow] (check1) -- node[right] {oui} (check2);
+    \draw[arrow] (check2) -- node[right] {oui} (check3);
+    \draw[arrow] (check3) -- node[below] {oui} (valid);
+
+    \draw[arrow, red] (check1.east) -- ++(0.5,0) |- node[near start, above] {non} (invalid);
+    \draw[arrow, red] (check2.east) -- ++(0.3,0) |- (invalid);
+    \draw[arrow, red] (check3.south) -- (invalid);
+\end{tikzpicture}
+\caption{Pipeline de validation d'une solution}
+\label{fig:validation_pipeline}
+\end{figure}

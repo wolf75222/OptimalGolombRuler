@@ -49,7 +49,8 @@
       "Bash(scriptsbuild_openmp_v6.bat)",
       "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; .\\\\scripts\\\\build_openmp_v6.bat\")",
       "Bash(powershell.exe:*)",
-      "Bash(scriptsbuild_sequential_v2.bat dev)"
+      "Bash(scriptsbuild_sequential_v2.bat dev)",
+      "Bash(pdflatex:*)"
     ],
     "deny": [],
     "ask": []

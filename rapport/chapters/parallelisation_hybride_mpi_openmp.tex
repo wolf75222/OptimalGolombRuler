@@ -1,0 +1,613 @@
+\chapter{Parallélisation hybride MPI + OpenMP}
+
+\epigraph{\textit{``The combination of MPI and OpenMP in a single program can take advantage of both shared memory and distributed memory hardware.''}}{--- Rolf Rabenseifner}
+
+\section{Objectif et contraintes}
+
+\subsection{Objectif : passage à l'échelle multi-nœuds}
+
+Alors qu'OpenMP exploite les cœurs d'un seul nœud, MPI (\textit{Message Passing Interface}) permet de distribuer le calcul sur \textbf{plusieurs nœuds} d'un cluster. L'approche \textbf{hybride MPI+OpenMP} combine les deux paradigmes :
+
+\begin{itemize}
+    \item \textbf{MPI} : communication inter-nœuds (mémoire distribuée)
+    \item \textbf{OpenMP} : parallélisme intra-nœud (mémoire partagée)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.7]
+    % Noeud 1
+    \draw[thick, rounded corners, fill=burgundy!10] (0,0) rectangle (5,4);
+    \node[above] at (2.5, 4) {\textbf{Nœud 1}};
+    \node at (2.5, 3.3) {MPI Rank 0};
+    \foreach \x in {0.5, 1.5, 2.5, 3.5} {
+        \draw[fill=gold!40] (\x+0.2, 0.5) rectangle (\x+0.8, 2.5);
+    }
+    \node at (2.5, 1.5) {\tiny OpenMP};
+
+    % Noeud 2
+    \draw[thick, rounded corners, fill=burgundy!10] (6,0) rectangle (11,4);
+    \node[above] at (8.5, 4) {\textbf{Nœud 2}};
+    \node at (8.5, 3.3) {MPI Rank 1};
+    \foreach \x in {6.5, 7.5, 8.5, 9.5} {
+        \draw[fill=gold!40] (\x+0.2, 0.5) rectangle (\x+0.8, 2.5);
+    }
+    \node at (8.5, 1.5) {\tiny OpenMP};
+
+    % Noeud 3
+    \draw[thick, rounded corners, fill=burgundy!10] (12,0) rectangle (17,4);
+    \node[above] at (14.5, 4) {\textbf{Nœud 3}};
+    \node at (14.5, 3.3) {MPI Rank 2};
+    \foreach \x in {12.5, 13.5, 14.5, 15.5} {
+        \draw[fill=gold!40] (\x+0.2, 0.5) rectangle (\x+0.8, 2.5);
+    }
+    \node at (14.5, 1.5) {\tiny OpenMP};
+
+    % Réseau
+    \draw[<->, very thick, blue] (5, 2) -- (6, 2);
+    \draw[<->, very thick, blue] (11, 2) -- (12, 2);
+    \node[blue, below] at (8.5, -0.5) {Réseau (InfiniBand / Ethernet)};
+    \draw[blue, thick] (2.5, -0.3) -- (14.5, -0.3);
+\end{tikzpicture}
+\caption{Architecture hybride MPI+OpenMP : chaque processus MPI lance plusieurs threads OpenMP}
+\label{fig:hybrid_architecture}
+\end{figure}
+
+\subsection{Avantages de l'approche hybride}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{5cm}p{5cm}}
+\toprule
+\textbf{Critère} & \textbf{MPI pur} & \textbf{Hybride MPI+OpenMP} \\
+\midrule
+Mémoire & Répliquée par processus & Partagée au sein du nœud \\
+Communication & Coût élevé intra-nœud & Minimisée (OpenMP local) \\
+Scalabilité & Limitée par la mémoire & Meilleure utilisation \\
+Complexité & Modérée & Plus élevée \\
+\bottomrule
+\end{tabular}
+\caption{Comparaison MPI pur vs hybride}
+\label{tab:mpi_vs_hybrid}
+\end{table}
+
+\subsection{Contraintes selon les versions}
+
+Trois versions MPI ont été implémentées avec des contraintes différentes :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Version} & \textbf{Contrainte sur $P$} & \textbf{Communication} \\
+\midrule
+V1 & $P = 2^k$ & Hypercube + loop unrolling \\
+V2 & $P = 2^k$ & Hypercube + BitSet128 shift \\
+V3 & Aucune & \texttt{MPI\_Allreduce} standard \\
+\bottomrule
+\end{tabular}
+\caption{Versions MPI et leurs contraintes}
+\label{tab:mpi_versions}
+\end{table}
+
+\begin{important}{Contrainte puissance de 2 (V1, V2)}
+Les versions V1 et V2 utilisent une topologie \textbf{hypercube} qui requiert un nombre de processus $P = 2^k$. Cette contrainte permet des communications en $O(\log_2 P)$ étapes.
+\end{important}
+
+La version V3 lève cette contrainte en utilisant \texttt{MPI\_Allreduce}, permettant tout nombre de processus mais avec un surcoût potentiel.
+
+\section{Partitionnement inter-processus}
+
+\subsection{Stratégie de distribution}
+
+L'espace de recherche est partitionné entre les processus MPI de manière \textbf{statique} et \textbf{déterministe} :
+
+\begin{enumerate}
+    \item Tous les processus génèrent \textbf{identiquement} l'ensemble des préfixes valides ;
+    \item Chaque processus ne traite que les préfixes dont l'index lui est assigné.
+\end{enumerate}
+
+\begin{lstlisting}[language=C++, caption={Distribution des préfixes entre rangs MPI}]
+// Tous les rangs generent les memes prefixes
+std::vector<WorkItem> allPrefixes;
+generatePrefixes(..., allPrefixes);
+
+const int totalPrefixes = allPrefixes.size();
+const int rank = hypercube.rank();
+const int size = hypercube.size();
+
+// Chaque rang ne garde que ses prefixes
+std::vector<WorkItem> myPrefixes;
+for (int i = 0; i < totalPrefixes; ++i) {
+    if (i % size == rank) {
+        myPrefixes.push_back(allPrefixes[i]);
+    }
+}
+\end{lstlisting}
+
+\subsection{Distribution cyclique}
+
+La distribution cyclique (round-robin) assure un équilibrage initial :
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.6]
+    % Préfixes
+    \node at (-2, 0) {Préfixes :};
+    \foreach \i in {0,...,11} {
+        \draw (\i, -0.5) rectangle (\i+0.9, 0.5);
+        \node at (\i+0.45, 0) {\small \i};
+    }
+
+    % Distribution
+    \draw[->, thick] (5.5, -1) -- (5.5, -2);
+
+    % Rank 0
+    \node at (-2, -3) {Rank 0 :};
+    \foreach \i/\c in {0/0, 4/4, 8/8} {
+        \draw[fill=gold!50] (\c*0.7, -3.5) rectangle (\c*0.7+0.6, -2.5);
+        \node at (\c*0.7+0.3, -3) {\small \i};
+    }
+
+    % Rank 1
+    \node at (-2, -4.5) {Rank 1 :};
+    \foreach \i/\c in {1/1, 5/5, 9/9} {
+        \draw[fill=blue!50] (\c*0.7, -5) rectangle (\c*0.7+0.6, -4);
+        \node at (\c*0.7+0.3, -4.5) {\small \i};
+    }
+
+    % Rank 2
+    \node at (-2, -6) {Rank 2 :};
+    \foreach \i/\c in {2/2, 6/6, 10/10} {
+        \draw[fill=green!50] (\c*0.7, -6.5) rectangle (\c*0.7+0.6, -5.5);
+        \node at (\c*0.7+0.3, -6) {\small \i};
+    }
+
+    % Rank 3
+    \node at (-2, -7.5) {Rank 3 :};
+    \foreach \i/\c in {3/3, 7/7, 11/11} {
+        \draw[fill=red!50] (\c*0.7, -8) rectangle (\c*0.7+0.6, -7);
+        \node at (\c*0.7+0.3, -7.5) {\small \i};
+    }
+
+    % Formule
+    \node at (10, -5) {$\text{prefix}_i \to \text{Rank } (i \mod P)$};
+\end{tikzpicture}
+\caption{Distribution cyclique des préfixes entre 4 processus MPI}
+\label{fig:cyclic_distribution}
+\end{figure}
+
+\subsection{Avantages de cette approche}
+
+\begin{enumerate}
+    \item \textbf{Pas de communication initiale} : chaque processus calcule ses préfixes localement ;
+    \item \textbf{Déterminisme} : la même exécution donne toujours la même distribution ;
+    \item \textbf{Équilibrage initial} : les préfixes sont répartis équitablement ($\pm 1$).
+\end{enumerate}
+
+\section{Recherche locale intra-processus}
+
+\subsection{Structure de l'exécution}
+
+Chaque processus MPI exécute une recherche OpenMP sur ses préfixes assignés :
+
+\begin{lstlisting}[language=C++, caption={Exploration locale avec OpenMP}]
+#pragma omp parallel shared(globalBestLen, localBestLen, ...)
+{
+    ThreadBest threadBest;
+    StackFrame stack[MAX_MARKS];
+    long long threadExplored = 0;
+
+    #pragma omp for schedule(dynamic, 1)
+    for (int idx = startIdx; idx < endIdx; ++idx) {
+        const WorkItem& prefix = myPrefixes[idx];
+
+        // Pruning precoce
+        if (prefix.ruler_length + minAdditional >= currentGlobal) {
+            continue;
+        }
+
+        // Initialisation de la pile
+        stack[0] = prefix;
+
+        // Backtracking iteratif
+        backtrackIterative(threadBest, n, globalBestLen,
+                           threadExplored, stack);
+    }
+
+    // Fusion locale
+    #pragma omp critical
+    {
+        if (threadBest.bestLen < localBestLen) {
+            localBestLen = threadBest.bestLen;
+            // Copier la solution
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{Hiérarchie des bornes}
+
+Trois niveaux de bornes sont maintenus :
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=3cm, minimum height=1cm, align=center},
+]
+    % Global MPI
+    \node[box, fill=burgundy!30] (global) {globalBestLen\\(tous les rangs)};
+
+    % Local process
+    \node[box, fill=gold!30, below left=1.5cm and 0.5cm of global] (local0) {localBestLen\\(Rank 0)};
+    \node[box, fill=gold!30, below right=1.5cm and 0.5cm of global] (local1) {localBestLen\\(Rank 1)};
+
+    % Thread local
+    \node[box, fill=blue!20, below=1.2cm of local0] (t00) {threadBest\\(T0)};
+    \node[box, fill=blue!20, right=0.3cm of t00] (t01) {threadBest\\(T1)};
+
+    \node[box, fill=blue!20, below=1.2cm of local1] (t10) {threadBest\\(T0)};
+    \node[box, fill=blue!20, right=0.3cm of t10] (t11) {threadBest\\(T1)};
+
+    % Arrows
+    \draw[->, thick] (t00) -- (local0);
+    \draw[->, thick] (t01) -- (local0);
+    \draw[->, thick] (t10) -- (local1);
+    \draw[->, thick] (t11) -- (local1);
+    \draw[->, thick, red] (local0) -- (global) node[midway, left] {\small MPI};
+    \draw[->, thick, red] (local1) -- (global) node[midway, right] {\small MPI};
+
+    % Labels
+    \node[right=3cm of global] {Synchronisation MPI périodique};
+    \node[right=2cm of local1] {Fusion OpenMP (critical)};
+    \node[right=1cm of t11] {Mise à jour atomique};
+\end{tikzpicture}
+\caption{Hiérarchie des bornes dans l'architecture hybride}
+\label{fig:bound_hierarchy}
+\end{figure}
+
+\subsection{Exécution par rondes}
+
+Pour permettre la synchronisation MPI périodique, l'exploration est découpée en \textbf{rondes} :
+
+\begin{lstlisting}[language=C++, caption={Exécution par rondes avec synchronisation}]
+constexpr int SYNC_INTERVAL = 64;  // Prefixes par ronde
+
+int prefixIndex = 0;
+while (prefixIndex < myNumPrefixes) {
+    int endIdx = std::min(prefixIndex + SYNC_INTERVAL, myNumPrefixes);
+
+    // Exploration OpenMP de [prefixIndex, endIdx)
+    #pragma omp parallel for schedule(dynamic, 1)
+    for (int idx = prefixIndex; idx < endIdx; ++idx) {
+        // ... backtracking ...
+    }
+
+    prefixIndex = endIdx;
+
+    // Synchronisation MPI (hypercube ou allreduce)
+    int globalMin = hypercube.allReduceMin(localBestLen);
+    globalBestLen = std::min(globalBestLen, globalMin);
+}
+\end{lstlisting}
+
+\section{Communications : réduction hypercube}
+
+\subsection{Topologie hypercube}
+
+Un \textbf{hypercube} de dimension $d$ connecte $P = 2^d$ processus. Chaque processus a exactement $d$ voisins, obtenus en inversant un bit de son rang :
+
+\begin{equation}
+\text{voisin}(r, k) = r \oplus 2^k \quad \text{pour } k \in \{0, 1, \ldots, d-1\}
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.2]
+    % Hypercube 3D (8 processus)
+    \coordinate (000) at (0,0,0);
+    \coordinate (001) at (2,0,0);
+    \coordinate (010) at (0,2,0);
+    \coordinate (011) at (2,2,0);
+    \coordinate (100) at (0.7,0.7,2);
+    \coordinate (101) at (2.7,0.7,2);
+    \coordinate (110) at (0.7,2.7,2);
+    \coordinate (111) at (2.7,2.7,2);
+
+    % Arêtes dimension 0 (rouge)
+    \draw[thick, red] (000) -- (001);
+    \draw[thick, red] (010) -- (011);
+    \draw[thick, red] (100) -- (101);
+    \draw[thick, red] (110) -- (111);
+
+    % Arêtes dimension 1 (bleu)
+    \draw[thick, blue] (000) -- (010);
+    \draw[thick, blue] (001) -- (011);
+    \draw[thick, blue] (100) -- (110);
+    \draw[thick, blue] (101) -- (111);
+
+    % Arêtes dimension 2 (vert)
+    \draw[thick, green!50!black] (000) -- (100);
+    \draw[thick, green!50!black] (001) -- (101);
+    \draw[thick, green!50!black] (010) -- (110);
+    \draw[thick, green!50!black] (011) -- (111);
+
+    % Nœuds
+    \foreach \coord/\label in {000/0, 001/1, 010/2, 011/3, 100/4, 101/5, 110/6, 111/7} {
+        \fill[burgundy] (\coord) circle (0.15);
+        \node[below left] at (\coord) {\label};
+    }
+
+    % Légende
+    \node[red, right] at (4, 2) {dim 0 : $r \oplus 1$};
+    \node[blue, right] at (4, 1.5) {dim 1 : $r \oplus 2$};
+    \node[green!50!black, right] at (4, 1) {dim 2 : $r \oplus 4$};
+\end{tikzpicture}
+\caption{Hypercube 3D ($P=8$) : chaque nœud a 3 voisins}
+\label{fig:hypercube}
+\end{figure}
+
+\subsection{Algorithme all-reduce minimum}
+
+L'algorithme de réduction sur hypercube s'exécute en $\log_2 P$ étapes :
+
+\begin{algorithm}[H]
+\caption{All-reduce minimum sur hypercube}
+\label{alg:hypercube_allreduce}
+\begin{algorithmic}[1]
+\Require Valeur locale $localMin$, rang $r$, dimension $d = \log_2 P$
+\Ensure Tous les processus ont le minimum global
+\State $result \gets localMin$
+\For{$k \gets 0$ \textbf{to} $d-1$}
+    \State $partner \gets r \oplus 2^k$ \Comment{Voisin en dimension $k$}
+    \State Échanger $result$ avec $partner$ \Comment{\texttt{MPI\_Sendrecv}}
+    \State $result \gets \min(result, \text{valeur reçue})$
+\EndFor
+\State \Return $result$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lstlisting}[language=C++, caption={Implémentation all-reduce hypercube}]
+int HypercubeMPI::allReduceMin(int localMin) {
+    if (size_ == 1) return localMin;
+
+    int result = localMin;
+
+    for (int d = 0; d < dimensions_; ++d) {
+        int partner = rank_ ^ (1 << d);  // XOR avec 2^d
+        int recvVal;
+
+        MPI_Sendrecv(&result, 1, MPI_INT, partner, d,
+                     &recvVal, 1, MPI_INT, partner, d,
+                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        if (recvVal < result) {
+            result = recvVal;
+        }
+    }
+
+    return result;
+}
+\end{lstlisting}
+
+\subsection{Complexité des communications}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Opération} & \textbf{Hypercube} & \textbf{MPI\_Allreduce} \\
+\midrule
+Nombre de rounds & $\log_2 P$ & $\leq 2\log_2 P$ (impl. dépendant) \\
+Messages par round & 1 & Variable \\
+Latence totale & $O(\log P)$ & $O(\log P)$ \\
+Contrainte & $P = 2^k$ & Aucune \\
+\bottomrule
+\end{tabular}
+\caption{Comparaison des stratégies de communication}
+\label{tab:comm_comparison}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.7]
+    % Étapes de réduction sur 8 processus
+    \foreach \t in {0,...,7} {
+        \node at (-1, 3-\t*0.8) {P\t};
+        \fill[burgundy] (0, 3-\t*0.8) circle (0.15);
+    }
+
+    % Étape 0 (dimension 0)
+    \node at (2, 4) {\small Étape 0};
+    \foreach \y in {0,2,4,6} {
+        \draw[->, thick, red] (0.3, 3-\y*0.8) -- (1.7, 3-\y*0.8-0.8);
+        \draw[->, thick, red] (0.3, 3-\y*0.8-0.8) -- (1.7, 3-\y*0.8);
+    }
+    \foreach \t in {0,...,7} {
+        \fill[burgundy] (2, 3-\t*0.8) circle (0.15);
+    }
+
+    % Étape 1 (dimension 1)
+    \node at (4, 4) {\small Étape 1};
+    \foreach \y in {0,4} {
+        \draw[->, thick, blue] (2.3, 3-\y*0.8) -- (3.7, 3-\y*0.8-1.6);
+        \draw[->, thick, blue] (2.3, 3-\y*0.8-0.8) -- (3.7, 3-\y*0.8-1.6-0.8);
+        \draw[->, thick, blue] (2.3, 3-\y*0.8-1.6) -- (3.7, 3-\y*0.8);
+        \draw[->, thick, blue] (2.3, 3-\y*0.8-1.6-0.8) -- (3.7, 3-\y*0.8-0.8);
+    }
+    \foreach \t in {0,...,7} {
+        \fill[burgundy] (4, 3-\t*0.8) circle (0.15);
+    }
+
+    % Étape 2 (dimension 2)
+    \node at (6, 4) {\small Étape 2};
+    \draw[->, thick, green!50!black] (4.3, 3) -- (5.7, 3-3.2);
+    \draw[->, thick, green!50!black] (4.3, 3-3.2) -- (5.7, 3);
+    \foreach \t in {0,...,7} {
+        \fill[green!50!black] (6, 3-\t*0.8) circle (0.15);
+    }
+
+    \node at (3, -4) {$\log_2(8) = 3$ étapes pour 8 processus};
+\end{tikzpicture}
+\caption{Déroulement de l'all-reduce sur hypercube ($P=8$)}
+\label{fig:allreduce_steps}
+\end{figure}
+
+\subsection{Alternative : MPI\_Allreduce (V3)}
+
+La version V3 utilise \texttt{MPI\_Allreduce} standard, permettant tout nombre de processus :
+
+\begin{lstlisting}[language=C++, caption={Synchronisation avec MPI\_Allreduce (V3)}]
+// Pas de contrainte sur le nombre de processus
+int localMin = localBestLen;
+int globalMin;
+
+MPI_Allreduce(&localMin, &globalMin, 1, MPI_INT,
+              MPI_MIN, MPI_COMM_WORLD);
+
+// Mise a jour de la borne
+globalBestLen = globalMin;
+\end{lstlisting}
+
+\section{Équilibrage de charge}
+
+\subsection{Sources de déséquilibre}
+
+Malgré la distribution cyclique, plusieurs facteurs créent un déséquilibre :
+
+\begin{enumerate}
+    \item \textbf{Taille variable des sous-arbres} : certains préfixes mènent à des explorations plus longues ;
+    \item \textbf{Élagage dynamique} : les processus découvrant tôt une bonne solution élaguent plus efficacement ;
+    \item \textbf{Synchronisation périodique} : les processus rapides attendent aux points de synchronisation.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.6]
+    % Timeline
+    \draw[->] (0,0) -- (16,0) node[right] {temps};
+
+    % Processus
+    \foreach \p/\label in {0/P0, 1/P1, 2/P2, 3/P3} {
+        \node[left] at (0, 3-\p) {\label};
+        \draw[dashed, gray] (0, 3-\p) -- (15, 3-\p);
+    }
+
+    % Travail (barres de différentes longueurs)
+    \fill[gold!70] (0, 2.7) rectangle (12, 3.3);
+    \fill[gold!70] (0, 1.7) rectangle (8, 2.3);
+    \fill[gold!70] (0, 0.7) rectangle (14, 1.3);
+    \fill[gold!70] (0, -0.3) rectangle (6, 0.3);
+
+    % Points de sync
+    \foreach \x in {6, 12} {
+        \draw[thick, red, dashed] (\x, -0.5) -- (\x, 3.5);
+        \node[red, above] at (\x, 3.5) {\small sync};
+    }
+
+    % Temps d'attente (idle)
+    \fill[gray!30] (8, 1.7) rectangle (12, 2.3);
+    \fill[gray!30] (6, -0.3) rectangle (12, 0.3);
+
+    % Fin
+    \draw[thick, green!50!black] (14, -0.5) -- (14, 3.5);
+    \node[green!50!black, above] at (14, 3.5) {\small fin};
+
+    % Légende
+    \node at (8, -2) {Travail};
+    \fill[gold!70] (5, -2.2) rectangle (6, -1.8);
+    \node at (12, -2) {Idle};
+    \fill[gray!30] (9, -2.2) rectangle (10, -1.8);
+\end{tikzpicture}
+\caption{Déséquilibre de charge : P3 termine tôt et attend}
+\label{fig:load_imbalance}
+\end{figure}
+
+\subsection{Impact du déséquilibre}
+
+Le temps total est déterminé par le processus le plus lent :
+
+\begin{equation}
+T_{total} = \max_i(T_i) \geq \frac{1}{P} \sum_i T_i = \frac{T_{seq}}{P}
+\end{equation}
+
+L'\textbf{efficacité} est réduite :
+\begin{equation}
+E = \frac{T_{seq}}{P \cdot T_{total}} = \frac{\bar{T}}{T_{max}} \leq 1
+\end{equation}
+
+où $\bar{T}$ est le temps moyen et $T_{max}$ le temps maximum.
+
+\subsection{Mesures actuelles}
+
+Notre implémentation utilise plusieurs techniques pour limiter le déséquilibre :
+
+\begin{enumerate}
+    \item \textbf{Distribution cyclique} : mélange les préfixes entre processus ;
+    \item \textbf{Granularité fine} : nombreux préfixes ($\gg P$) pour le lissage statistique ;
+    \item \textbf{OpenMP dynamic} : équilibrage intra-nœud ;
+    \item \textbf{Synchronisation fréquente} : propagation rapide des bornes.
+\end{enumerate}
+
+\subsection{Pistes d'amélioration}
+
+Plusieurs approches pourraient améliorer l'équilibrage :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{5cm}p{4cm}}
+\toprule
+\textbf{Technique} & \textbf{Principe} & \textbf{Complexité} \\
+\midrule
+Work stealing & Les processus inactifs ``volent'' du travail aux processus chargés & Élevée (communication) \\
+\midrule
+Distribution dynamique & Un processus maître distribue les tâches à la demande & Goulot d'étranglement potentiel \\
+\midrule
+Estimation de coût & Estimer la taille des sous-arbres pour équilibrer a priori & Difficile sans exploration \\
+\midrule
+Over-decomposition & Générer beaucoup plus de préfixes que de processus & Surcoût mémoire \\
+\bottomrule
+\end{tabular}
+\caption{Pistes d'amélioration de l'équilibrage}
+\label{tab:load_balance_improvements}
+\end{table}
+
+\begin{defi}{Recommandation pratique}
+Pour notre problème, la combinaison de :
+\begin{itemize}
+    \item Génération de préfixes à profondeur adaptée ($\sim$1000--10000 préfixes par processus)
+    \item Distribution cyclique
+    \item Synchronisation toutes les 64 tâches
+\end{itemize}
+offre un bon compromis entre équilibrage et surcoût de communication.
+\end{defi}
+
+\subsection{Résumé de l'architecture}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm,
+    phase/.style={rectangle, draw=burgundy, fill=burgundy!10, rounded corners, minimum width=10cm, minimum height=1cm, align=center},
+    arrow/.style={->, thick}
+]
+    \node[phase] (p1) {Phase 1 : Génération des préfixes (séquentielle, tous les rangs)};
+    \node[phase, below=of p1] (p2) {Phase 2 : Distribution cyclique des préfixes};
+    \node[phase, below=of p2] (p3) {Phase 3 : Exploration par rondes};
+    \node[phase, fill=gold!20, below=of p3] (p3a) {OpenMP : backtracking parallèle intra-nœud};
+    \node[phase, fill=blue!20, below=of p3a] (p3b) {MPI : synchronisation hypercube inter-nœuds};
+    \node[phase, below=of p3b] (p4) {Phase 4 : Réduction finale et broadcast de la solution};
+
+    \draw[arrow] (p1) -- (p2);
+    \draw[arrow] (p2) -- (p3);
+    \draw[arrow] (p3) -- (p3a);
+    \draw[arrow] (p3a) -- (p3b);
+    \draw[arrow, dashed] (p3b.east) -- ++(1,0) |- (p3.east);
+    \draw[arrow] (p3b) -- (p4);
+
+    \node[right=0.5cm of p3b] {\small Itérer};
+\end{tikzpicture}
+\caption{Vue d'ensemble de l'algorithme hybride MPI+OpenMP}
+\label{fig:algorithm_overview}
+\end{figure}

@@ -1,0 +1,498 @@
+\appendix
+
+\chapter{Annexes}
+\label{chap:annexes}
+
+% =============================================================================
+\section{Détails d'implémentation}
+\label{sec:annexe:implementation}
+% =============================================================================
+
+\subsection{Structure BitSet128}
+
+La structure \texttt{BitSet128} est au cœur de l'optimisation de notre algorithme. Elle représente un ensemble de bits sur 128 positions en utilisant deux entiers 64 bits.
+
+\begin{lstlisting}[language=C++, caption={Implémentation complète de BitSet128}]
+struct alignas(16) BitSet128 {
+    uint64_t lo;  // bits 0-63
+    uint64_t hi;  // bits 64-127
+
+    BitSet128() : lo(0), hi(0) {}
+    BitSet128(uint64_t l, uint64_t h) : lo(l), hi(h) {}
+
+    // Positionne le bit à la position pos
+    inline void set(int pos) {
+        if (pos < 64) {
+            lo |= (1ULL << pos);
+        } else {
+            hi |= (1ULL << (pos - 64));
+        }
+    }
+
+    // Teste si le bit à la position pos est à 1
+    inline bool test(int pos) const {
+        if (pos < 64) {
+            return (lo >> pos) & 1;
+        } else {
+            return (hi >> (pos - 64)) & 1;
+        }
+    }
+
+    // Décalage à gauche de n positions
+    inline BitSet128 operator<<(int n) const {
+        if (n == 0) return *this;
+        if (n >= 128) return BitSet128(0, 0);
+        if (n >= 64) {
+            return BitSet128(0, lo << (n - 64));
+        }
+        uint64_t new_hi = (hi << n) | (lo >> (64 - n));
+        uint64_t new_lo = lo << n;
+        return BitSet128(new_lo, new_hi);
+    }
+
+    // ET bit-à-bit
+    inline BitSet128 operator&(const BitSet128& other) const {
+        return BitSet128(lo & other.lo, hi & other.hi);
+    }
+
+    // OU bit-à-bit
+    inline BitSet128 operator|(const BitSet128& other) const {
+        return BitSet128(lo | other.lo, hi | other.hi);
+    }
+
+    // XOR bit-à-bit
+    inline BitSet128 operator^(const BitSet128& other) const {
+        return BitSet128(lo ^ other.lo, hi ^ other.hi);
+    }
+
+    // Teste si au moins un bit est à 1
+    inline bool any() const {
+        return (lo | hi) != 0;
+    }
+
+    // Remet tous les bits à 0
+    inline void reset() {
+        lo = hi = 0;
+    }
+};
+\end{lstlisting}
+
+\subsection{Structure GolombRuler}
+
+La structure représentant une règle de Golomb avec ses métadonnées :
+
+\begin{lstlisting}[language=C++, caption={Structure GolombRuler}]
+struct GolombRuler {
+    std::vector<int> marks;  // Positions des marques
+    int length;              // Longueur de la règle
+
+    GolombRuler() : length(0) {}
+
+    void computeLength() {
+        if (marks.empty()) {
+            length = 0;
+        } else {
+            length = marks.back();
+        }
+    }
+
+    bool isValid() const {
+        std::set<int> diffs;
+        for (size_t i = 0; i < marks.size(); ++i) {
+            for (size_t j = i + 1; j < marks.size(); ++j) {
+                int d = marks[j] - marks[i];
+                if (diffs.count(d)) return false;
+                diffs.insert(d);
+            }
+        }
+        return true;
+    }
+
+    void print() const {
+        std::cout << "Length: " << length << "\n";
+        std::cout << "Marks: ";
+        for (int m : marks) std::cout << m << " ";
+        std::cout << "\n";
+    }
+};
+\end{lstlisting}
+
+\subsection{Structure WorkItem pour la parallélisation}
+
+Chaque unité de travail parallèle est représentée par :
+
+\begin{lstlisting}[language=C++, caption={Structure WorkItem}]
+struct alignas(32) WorkItemV5 {
+    BitSet128 reversed_marks;  // Marques inversées (bitset)
+    BitSet128 used_dist;       // Différences utilisées
+    int marks_count;           // Nombre de marques placées
+    int ruler_length;          // Longueur actuelle
+};
+\end{lstlisting}
+
+\subsection{Structure StackFrame pour le backtracking itératif}
+
+\begin{lstlisting}[language=C++, caption={Structure StackFrame}]
+struct alignas(32) StackFrameV5 {
+    BitSet128 reversed_marks;
+    BitSet128 used_dist;
+    int marks_count;
+    int ruler_length;
+    int next_candidate;  // Prochaine position à explorer
+};
+\end{lstlisting}
+
+% =============================================================================
+\section{Commandes de compilation et d'exécution}
+\label{sec:annexe:commandes}
+% =============================================================================
+
+\subsection{Compilation sous Linux/Unix}
+
+\begin{lstlisting}[language=bash, caption={Compilation avec Make}]
+# Nettoyer les builds précédents
+make clean
+
+# Versions séquentielles
+make sequential        # V1 originale
+make sequential_v2     # V2 avec BitSet128
+
+# Versions OpenMP
+make openmp           # V1
+make openmp_v2        # V2 (récursif + bitset)
+make openmp_v3        # V3 (hybride)
+make openmp_v4        # V4 (préfixes)
+make openmp_v5        # V5 (uint64_t, la plus rapide)
+
+# Versions MPI+OpenMP
+make mpi              # V1 (hypercube)
+make mpi_v2           # V2 (hypercube + BitSet128)
+make mpi_v3           # V3 (Allreduce + BitSet128)
+
+# Compilation avec flags personnalisés
+make openmp_v5 CXX=g++ OPTFLAGS="-O3 -march=native -flto"
+\end{lstlisting}
+
+\subsection{Compilation sous Windows (MSVC)}
+
+\begin{lstlisting}[language=bash, caption={Compilation avec scripts Windows}]
+# OpenMP V1
+scripts\build_openmp.bat
+
+# OpenMP V5 (optimisée)
+scripts\build_openmp_v5.bat
+
+# MPI
+scripts\build_mpi.bat
+
+# Séquentiel
+scripts\build_sequential.bat
+\end{lstlisting}
+
+\subsection{Exécution locale}
+
+\begin{lstlisting}[language=bash, caption={Exécution des différentes versions}]
+# Séquentiel
+./build/golomb_sequential 12
+./build/golomb_sequential_v2 13
+
+# OpenMP (utilise OMP_NUM_THREADS ou tous les cores)
+export OMP_NUM_THREADS=8
+./build/golomb_openmp_v5 13
+
+# Ou directement
+OMP_NUM_THREADS=16 ./build/golomb_openmp_v5 13
+
+# MPI (V1/V2 : nombre de procs = puissance de 2)
+mpiexec -n 4 ./build/golomb_mpi_v2 13
+
+# MPI V3 (n'importe quel nombre de procs)
+mpiexec -n 6 ./build/golomb_mpi_v3 13
+
+# MPI+OpenMP hybride
+OMP_NUM_THREADS=8 mpiexec -n 4 ./build/golomb_mpi_v3 13
+\end{lstlisting}
+
+\subsection{Exécution sur cluster HPC (SLURM)}
+
+\begin{lstlisting}[language=bash, caption={Soumission de jobs SLURM}]
+# Benchmarks OpenMP
+sbatch golomb_openmp_compare.slurm
+
+# Benchmarks MPI
+sbatch golomb_mpi_compare.slurm
+
+# Benchmarks séquentiels
+sbatch golomb_sequential_compare.slurm
+
+# Vérifier le statut
+squeue -u $USER
+
+# Voir les résultats
+cat job.*.out
+\end{lstlisting}
+
+\subsection{Exemple de script SLURM complet}
+
+\begin{lstlisting}[language=bash, caption={Script SLURM pour benchmarks OpenMP}]
+#!/usr/bin/env bash
+#SBATCH --account=r250127
+#SBATCH --partition=short
+#SBATCH --constraint=x64cpu
+#SBATCH --time=0-02:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=192
+#SBATCH --mem=0
+#SBATCH --exclusive
+#SBATCH --job-name=golomb_openmp
+#SBATCH --output=job.%J.out
+#SBATCH --error=job.%J.err
+
+set -euo pipefail
+
+# Charger l'environnement
+romeo_load_x64cpu_env
+
+# Configuration OpenMP
+export OMP_PLACES=cores
+export OMP_PROC_BIND=close
+export OMP_STACKSIZE=16M
+
+# Compiler et exécuter
+make clean && make openmp_v5
+for t in 8 16 32 64 96 192; do
+    echo "=== Threads: $t ==="
+    OMP_NUM_THREADS=$t ./build/golomb_openmp_v5 13
+done
+\end{lstlisting}
+
+% =============================================================================
+\section{Format CSV des benchmarks}
+\label{sec:annexe:csv}
+% =============================================================================
+
+\subsection{Format de sortie}
+
+Chaque exécution produit une sortie standardisée au format suivant :
+
+\begin{lstlisting}[language=bash, caption={Format de sortie standard}]
+n          : 13
+Length     : 106
+Time       : 0.323
+States     : 3927643014
+States/sec : 1.22e+10
+Ruler      : 0 2 5 25 37 43 59 70 85 89 98 99 106
+\end{lstlisting}
+
+\subsection{Structure du fichier CSV}
+
+Les benchmarks génèrent des fichiers CSV avec les colonnes suivantes :
+
+\begin{lstlisting}[language=bash, caption={En-tête CSV pour benchmarks OpenMP}]
+threads,n,version,binding,time_s,length,states,states_per_sec
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash, caption={En-tête CSV pour benchmarks MPI}]
+mpi_procs,threads,total_workers,n,version,time_s,length,states,states_per_sec
+\end{lstlisting}
+
+\subsection{Exemple de données CSV}
+
+\begin{lstlisting}[caption={Extrait de results\_v1v2v3v4v5v6\_comparison.csv}]
+threads,n,version,binding,time_s,length,states,states_per_sec
+8,12,V1,close,2.903,85,595631518,2.05e+08
+8,12,V2,close,3.528,85,146992490,4.17e+07
+8,12,V3,close,2.518,85,292607030,1.16e+08
+8,12,V4,close,3.070,85,265729973,8.66e+07
+8,12,V5,close,0.373,85,204576015,5.49e+08
+8,12,V6,close,0.499,85,204572157,4.10e+08
+8,13,V1,close,47.258,106,8429498845,1.78e+08
+8,13,V2,close,49.147,106,1978437070,4.03e+07
+8,13,V3,close,34.821,106,3948834715,1.13e+08
+8,13,V4,close,53.114,106,4259438991,8.02e+07
+8,13,V5,close,7.436,106,3926548017,5.28e+08
+8,13,V6,close,10.009,106,3926559865,3.92e+08
+\end{lstlisting}
+
+\subsection{Parsing des résultats}
+
+Script bash pour extraire les temps depuis la sortie :
+
+\begin{lstlisting}[language=bash, caption={Fonction de parsing}]
+parse_output() {
+    local output="$1"
+    local field="$2"
+    echo "$output" | grep -E "^${field}\s*:" | \
+        sed -E "s#^${field}\s*:\s*##" | awk '{print $1}'
+}
+
+# Utilisation
+output=$(./build/golomb_openmp_v5 13)
+time_val=$(parse_output "$output" "Time")
+states_val=$(parse_output "$output" "States")
+echo "Time: $time_val, States: $states_val"
+\end{lstlisting}
+
+% =============================================================================
+\section{Tables de solutions optimales connues}
+\label{sec:annexe:solutions}
+% =============================================================================
+
+\subsection{Règles optimales de référence ($n = 2$ à $n = 14$)}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccl}
+\toprule
+$n$ & $L^*(n)$ & Règle optimale \\
+\midrule
+2 & 1 & $\{0, 1\}$ \\
+3 & 3 & $\{0, 1, 3\}$ \\
+4 & 6 & $\{0, 1, 4, 6\}$ \\
+5 & 11 & $\{0, 1, 4, 9, 11\}$ \\
+6 & 17 & $\{0, 1, 4, 10, 12, 17\}$ \\
+7 & 25 & $\{0, 1, 4, 10, 18, 23, 25\}$ \\
+8 & 34 & $\{0, 1, 4, 9, 15, 22, 32, 34\}$ \\
+9 & 44 & $\{0, 1, 5, 12, 25, 27, 35, 41, 44\}$ \\
+10 & 55 & $\{0, 1, 6, 10, 23, 26, 34, 41, 53, 55\}$ \\
+11 & 72 & $\{0, 1, 4, 13, 28, 33, 47, 54, 64, 70, 72\}$ \\
+12 & 85 & $\{0, 2, 6, 24, 29, 40, 43, 55, 68, 75, 76, 85\}$ \\
+13 & 106 & $\{0, 2, 5, 25, 37, 43, 59, 70, 85, 89, 98, 99, 106\}$ \\
+14 & 127 & $\{0, 4, 6, 20, 35, 52, 59, 77, 78, 86, 89, 99, 122, 127\}$ \\
+\bottomrule
+\end{tabular}
+\caption{Règles de Golomb optimales de référence}
+\label{tab:annexe:optimal}
+\end{table}
+
+\subsection{Règles optimales de grande taille ($n = 15$ à $n = 27$)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ccc}
+\toprule
+$n$ & $L^*(n)$ & Année de découverte \\
+\midrule
+15 & 151 & 1985 \\
+16 & 177 & 1986 \\
+17 & 199 & 1993 \\
+18 & 216 & 1993 \\
+19 & 246 & 1994 \\
+20 & 283 & 2004 \\
+21 & 333 & 2004 \\
+22 & 356 & 2009 \\
+23 & 372 & 2004 \\
+24 & 425 & 2004 \\
+25 & 480 & 2008 \\
+26 & 492 & 2009 \\
+27 & 553 & 2014 \\
+\bottomrule
+\end{tabular}
+\caption{Longueurs optimales pour $n > 14$ (sources : distributed.net)}
+\label{tab:annexe:large}
+\end{table}
+
+\subsection{Bornes théoriques}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+$n$ & $\binom{n}{2}$ (borne inf.) & $L^*(n)$ & Ratio & Parfaite ? \\
+\midrule
+2 & 1 & 1 & 1.00 & Oui \\
+3 & 3 & 3 & 1.00 & Oui \\
+4 & 6 & 6 & 1.00 & Oui \\
+5 & 10 & 11 & 1.10 & Non \\
+6 & 15 & 17 & 1.13 & Non \\
+7 & 21 & 25 & 1.19 & Non \\
+8 & 28 & 34 & 1.21 & Non \\
+9 & 36 & 44 & 1.22 & Non \\
+10 & 45 & 55 & 1.22 & Non \\
+11 & 55 & 72 & 1.31 & Non \\
+12 & 66 & 85 & 1.29 & Non \\
+13 & 78 & 106 & 1.36 & Non \\
+14 & 91 & 127 & 1.40 & Non \\
+\bottomrule
+\end{tabular}
+\caption{Comparaison avec la borne inférieure théorique}
+\label{tab:annexe:bounds}
+\end{table}
+
+\subsection{Statistiques de recherche}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cccc}
+\toprule
+$n$ & États explorés (V1) & États explorés (V2) & Réduction \\
+\midrule
+9 & 521,716 & 289,178 & 44.6\% \\
+10 & 3,934,951 & 2,047,267 & 48.0\% \\
+11 & 69,449,674 & 35,871,692 & 48.3\% \\
+12 & 545,517,652 & 264,788,630 & 51.5\% \\
+13 & 9,002,421,587 & 4,251,895,005 & 52.8\% \\
+\bottomrule
+\end{tabular}
+\caption{Réduction du nombre d'états avec l'optimisation BitSet128}
+\label{tab:annexe:states}
+\end{table}
+
+% =============================================================================
+\section{Configuration matérielle de référence}
+\label{sec:annexe:hardware}
+% =============================================================================
+
+\subsection{Cluster Romeo - Nœuds x86}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Caractéristique} & \textbf{Valeur} \\
+\midrule
+Processeur & AMD EPYC 9654 96-Core \\
+Sockets & 2 \\
+Cœurs par socket & 96 \\
+Threads par cœur & 1 (SMT désactivé) \\
+Cœurs totaux & 192 \\
+Fréquence max & 3.7 GHz \\
+Cache L1 (par cœur) & 32 Ko I + 32 Ko D \\
+Cache L2 (par cœur) & 1 Mo \\
+Cache L3 (partagé) & 384 Mo \\
+Domaines NUMA & 8 \\
+Mémoire & 768 Go DDR5 \\
+\bottomrule
+\end{tabular}
+\caption{Configuration des nœuds Romeo x86 (romeo-c)}
+\label{tab:annexe:romeo}
+\end{table}
+
+\subsection{Variables d'environnement OpenMP recommandées}
+
+\begin{lstlisting}[language=bash, caption={Configuration OpenMP optimale}]
+export OMP_NUM_THREADS=192
+export OMP_PLACES=cores
+export OMP_PROC_BIND=close    # ou spread pour multi-NUMA
+export OMP_STACKSIZE=16M
+export OMP_SCHEDULE="dynamic,1"
+\end{lstlisting}
+
+\subsection{Options de compilation recommandées}
+
+\begin{lstlisting}[language=bash, caption={Flags de compilation pour performance maximale}]
+# GCC
+CXXFLAGS="-std=c++20 -O3 -march=native -mtune=native \
+          -funroll-loops -fomit-frame-pointer -flto \
+          -fopenmp -DNDEBUG"
+
+# Clang
+CXXFLAGS="-std=c++20 -O3 -march=native \
+          -funroll-loops -flto \
+          -fopenmp -DNDEBUG"
+
+# MSVC
+CXXFLAGS="/std:c++20 /O2 /openmp /DNDEBUG"
+\end{lstlisting}

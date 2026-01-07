@@ -1,0 +1,332 @@
+tail -n 100000 job.259677.out
+Loading x86_64 (no gpu) environment
+Environment loaded. Spack available.
+==========================================
+Golomb Ruler OpenMP Comparison: V1-V6
+==========================================
+PWD at start: /home/rmdraux/OptimalGolombRuler
+SLURM_SUBMIT_DIR: /gpfs/home/rmdraux/OptimalGolombRuler
+NodeList: romeo-c025
+Total CPUs: 192
+Exclusive: YES
+Date: Wed Jan  7 20:59:39 CET 2026
+
+CPU Info:
+Architecture:                         x86_64
+CPU(s):                               384
+Model name:                           AMD EPYC 9654 96-Core Processor
+Thread(s) per core:                   1
+Core(s) per socket:                   96
+Socket(s):                            2
+CPU(s) scaling MHz:                   65%
+CPU max MHz:                          3707.8120
+NUMA node(s):                         8
+NUMA node0 CPU(s):                    0-23
+NUMA node1 CPU(s):                    24-47
+NUMA node2 CPU(s):                    48-71
+NUMA node3 CPU(s):                    72-95
+NUMA node4 CPU(s):                    96-119
+NUMA node5 CPU(s):                    120-143
+NUMA node6 CPU(s):                    144-167
+NUMA node7 CPU(s):                    168-191
+Building in: /scratch_p/rmdraux/259677/OptimalGolombRuler
+
+==========================================
+Building all OpenMP versions
+==========================================
+rm -rf build
+Using ARCH_FLAGS: -march=native -mtune=native
+Building openmp...
+mkdir -p build
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/search.o src/search.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/main_openmp.o src/main_openmp.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp build/search.o build/main_openmp.o
+Building openmp_v2...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v2_search_v2.o src/search_v2.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v2_main_openmp_v2.o src/main_openmp_v2.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v2 build/v2_search_v2.o build/v2_main_openmp_v2.o
+Building openmp_v3...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v3_search_v3.o src/search_v3.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v3_main_openmp_v3.o src/main_openmp_v3.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v3 build/v3_search_v3.o build/v3_main_openmp_v3.o
+Building openmp_v4...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v4_search_v4.o src/search_v4.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v4_main_openmp_v4.o src/main_openmp_v4.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v4 build/v4_search_v4.o build/v4_main_openmp_v4.o
+Building openmp_v5...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v5_search_v5.o src/search_v5.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v5_main_openmp_v5.o src/main_openmp_v5.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v5 build/v5_search_v5.o build/v5_main_openmp_v5.o
+Building openmp_v6...
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v6_search_v6.o src/search_v6.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v6_main_openmp_v6.o src/main_openmp_v6.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v6 build/v6_search_v6.o build/v6_main_openmp_v6.o
+
+Contents of build/:
+total 321K
+drwxr-xr-x 2 rmdraux rmdraux 4.0K Jan  7 20:59 .
+drwxr-xr-x 8 rmdraux rmdraux 4.0K Jan  7 20:59 ..
+-rwxr-xr-x 1 rmdraux rmdraux  42K Jan  7 20:59 golomb_openmp
+-rwxr-xr-x 1 rmdraux rmdraux  24K Jan  7 20:59 golomb_openmp_v2
+-rwxr-xr-x 1 rmdraux rmdraux  24K Jan  7 20:59 golomb_openmp_v3
+-rwxr-xr-x 1 rmdraux rmdraux  28K Jan  7 20:59 golomb_openmp_v4
+-rwxr-xr-x 1 rmdraux rmdraux  33K Jan  7 20:59 golomb_openmp_v5
+-rwxr-xr-x 1 rmdraux rmdraux  33K Jan  7 20:59 golomb_openmp_v6
+-rw-r--r-- 1 rmdraux rmdraux 173K Jan  7 20:59 main_openmp.o
+-rw-r--r-- 1 rmdraux rmdraux  39K Jan  7 20:59 search.o
+-rw-r--r-- 1 rmdraux rmdraux  38K Jan  7 20:59 v2_main_openmp_v2.o
+-rw-r--r-- 1 rmdraux rmdraux  53K Jan  7 20:59 v2_search_v2.o
+-rw-r--r-- 1 rmdraux rmdraux  38K Jan  7 20:59 v3_main_openmp_v3.o
+-rw-r--r-- 1 rmdraux rmdraux  46K Jan  7 20:59 v3_search_v3.o
+-rw-r--r-- 1 rmdraux rmdraux  38K Jan  7 20:59 v4_main_openmp_v4.o
+-rw-r--r-- 1 rmdraux rmdraux  68K Jan  7 20:59 v4_search_v4.o
+-rw-r--r-- 1 rmdraux rmdraux  62K Jan  7 20:59 v5_main_openmp_v5.o
+-rw-r--r-- 1 rmdraux rmdraux  62K Jan  7 20:59 v5_search_v5.o
+-rw-r--r-- 1 rmdraux rmdraux  62K Jan  7 20:59 v6_main_openmp_v6.o
+-rw-r--r-- 1 rmdraux rmdraux  63K Jan  7 20:59 v6_search_v6.o
+All binaries built successfully!
+
+==========================================
+Starting benchmarks...
+==========================================
+
+Threads  n    Version  Binding  Time(s)      Length   States          States/sec     
+--------------------------------------------------------------------------------------------
+8        12   V1       close    2.903        85       595631518       2.05e+08       
+8        12   V2       close    3.528        85       146992490       4.17e+07       
+8        12   V3       close    2.518        85       292607030       1.16e+08       
+8        12   V4       close    3.070        85       265729973       8.66e+07       
+8        12   V5       close    0.373        85       204576015       5.49e+08       
+8        12   V6       close    0.499        85       204572157       4.10e+08       
+
+8        13   V1       close    47.258       106      8429498845      1.78e+08       
+8        13   V2       close    49.147       106      1978437070      4.03e+07       
+8        13   V3       close    34.821       106      3948834715      1.13e+08       
+8        13   V4       close    53.114       106      4259438991      8.02e+07       
+8        13   V5       close    7.436        106      3926548017      5.28e+08       
+8        13   V6       close    10.009       106      3926559865      3.92e+08       
+
+16       12   V1       close    2.218        85       463351964       2.09e+08       
+16       12   V2       close    2.610        85       111468900       4.27e+07       
+16       12   V3       close    1.861        85       220917806       1.19e+08       
+16       12   V4       close    1.553        85       263942431       1.70e+08       
+16       12   V5       close    0.187        85       204367001       1.09e+09       
+16       12   V6       close    0.251        85       204364427       8.15e+08       
+
+16       13   V1       close    43.065       106      8585252385      1.99e+08       
+16       13   V2       close    47.453       106      2026085393      4.27e+07       
+16       13   V3       close    33.659       106      4040252593      1.20e+08       
+16       13   V4       close    26.571       106      4257163031      1.60e+08       
+16       13   V5       close    3.719        106      3925782069      1.06e+09       
+16       13   V6       close    5.005        106      3925767191      7.84e+08       
+
+32       12   V1       close    2.219        85       503474240       2.27e+08       
+32       12   V2       close    2.613        85       124935050       4.78e+07       
+32       12   V3       close    1.861        85       247763464       1.33e+08       
+32       12   V4       close    0.807        85       265195367       3.29e+08       
+32       12   V5       close    0.095        85       204261795       2.16e+09       
+32       12   V6       close    0.127        85       204264755       1.61e+09       
+
+32       13   V1       close    43.137       106      8949593821      2.07e+08       
+32       13   V2       close    47.446       106      2145056395      4.52e+07       
+32       13   V3       close    33.723       106      4273404989      1.27e+08       
+32       13   V4       close    13.286       106      4248929445      3.20e+08       
+32       13   V5       close    1.860        106      3922888481      2.11e+09       
+32       13   V6       close    2.504        106      3922919587      1.57e+09       
+
+64       12   V1       close    2.221        85       522264252       2.35e+08       
+64       12   V2       close    2.614        85       130063092       4.98e+07       
+64       12   V3       close    1.865        85       256003255       1.37e+08       
+64       12   V4       close    0.428        85       263472166       6.16e+08       
+64       12   V5       close    0.049        85       203834119       4.13e+09       
+64       12   V6       close    0.066        85       203838521       3.09e+09       
+
+64       13   V1       close    43.134       106      9255083584      2.15e+08       
+64       13   V2       close    47.474       106      2224176027      4.69e+07       
+64       13   V3       close    33.709       106      4423636366      1.31e+08       
+64       13   V4       close    6.669        106      4250997118      6.37e+08       
+64       13   V5       close    0.932        106      3919885827      4.21e+09       
+64       13   V6       close    1.254        106      3919904599      3.13e+09       
+
+96       12   V1       close    2.221        85       521170347       2.35e+08       
+96       12   V2       close    2.615        85       130032424       4.97e+07       
+96       12   V3       close    1.867        85       256319051       1.37e+08       
+96       12   V4       close    0.304        85       263799588       8.66e+08       
+96       12   V5       close    0.036        85       203640595       5.71e+09       
+96       12   V6       close    0.047        85       203641527       4.35e+09       
+
+96       13   V1       close    43.113       106      9259207259      2.15e+08       
+96       13   V2       close    47.474       106      2225657623      4.69e+07       
+96       13   V3       close    33.707       106      4423959647      1.31e+08       
+96       13   V4       close    4.472        106      4259772320      9.53e+08       
+96       13   V5       close    0.661        106      3921909569      5.93e+09       
+96       13   V6       close    0.894        106      3921923601      4.39e+09       
+
+192      12   V1       close    2.229        85       521815227       2.34e+08       
+192      12   V2       close    2.617        85       130094575       4.97e+07       
+192      12   V3       close    1.866        85       256082569       1.37e+08       
+192      12   V4       close    0.187        85       271125196       1.45e+09       
+192      12   V5       close    0.023        85       203673534       8.99e+09       
+192      12   V6       close    0.028        85       203665316       7.25e+09       
+
+192      13   V1       close    43.161       106      9257906965      2.14e+08       
+192      13   V2       close    47.498       106      2225545301      4.69e+07       
+192      13   V3       close    33.732       106      4424640854      1.31e+08       
+192      13   V4       close    2.276        106      4289725409      1.89e+09       
+192      13   V5       close    0.323        106      3927643014      1.22e+10       
+192      13   V6       close    0.435        106      3928171594      9.03e+09       
+
+8        12   V1       spread   2.907        85       595585736       2.05e+08       
+8        12   V2       spread   3.532        85       146966844       4.16e+07       
+8        12   V3       spread   2.517        85       292631348       1.16e+08       
+8        12   V4       spread   3.096        85       265722947       8.58e+07       
+8        12   V5       spread   0.373        85       204575759       5.49e+08       
+8        12   V6       spread   0.501        85       204572375       4.09e+08       
+
+8        13   V1       spread   47.290       106      8429599159      1.78e+08       
+8        13   V2       spread   49.169       106      1978390114      4.02e+07       
+8        13   V3       spread   34.914       106      3948863911      1.13e+08       
+8        13   V4       spread   53.184       106      4259449343      8.01e+07       
+8        13   V5       spread   7.440        106      3926544219      5.28e+08       
+8        13   V6       spread   10.019       106      3926561693      3.92e+08       
+
+16       12   V1       spread   2.218        85       463331632       2.09e+08       
+16       12   V2       spread   2.615        85       111477629       4.26e+07       
+16       12   V3       spread   1.864        85       220946038       1.19e+08       
+16       12   V4       spread   1.618        85       263925009       1.63e+08       
+16       12   V5       spread   0.188        85       204373589       1.09e+09       
+16       12   V6       spread   0.251        85       204364983       8.14e+08       
+
+16       13   V1       spread   43.137       106      8585208023      1.99e+08       
+16       13   V2       spread   47.513       106      2026097860      4.26e+07       
+16       13   V3       spread   33.710       106      4040442315      1.20e+08       
+16       13   V4       spread   26.629       106      4257087327      1.60e+08       
+16       13   V5       spread   3.724        106      3925779431      1.05e+09       
+16       13   V6       spread   5.011        106      3925752487      7.83e+08       
+
+32       12   V1       spread   2.222        85       503662664       2.27e+08       
+32       12   V2       spread   2.615        85       124877401       4.77e+07       
+32       12   V3       spread   1.864        85       247781228       1.33e+08       
+32       12   V4       spread   0.856        85       265167507       3.10e+08       
+32       12   V5       spread   0.095        85       204261227       2.15e+09       
+32       12   V6       spread   0.127        85       204263551       1.61e+09       
+
+32       13   V1       spread   43.172       106      8950279729      2.07e+08       
+32       13   V2       spread   47.494       106      2145102785      4.52e+07       
+32       13   V3       spread   33.697       106      4273560721      1.27e+08       
+32       13   V4       spread   13.320       106      4248905587      3.19e+08       
+32       13   V5       spread   1.863        106      3922894559      2.11e+09       
+32       13   V6       spread   2.507        106      3922921901      1.56e+09       
+
+64       12   V1       spread   2.219        85       521608285       2.35e+08       
+64       12   V2       spread   2.618        85       130095063       4.97e+07       
+64       12   V3       spread   1.865        85       256104139       1.37e+08       
+64       12   V4       spread   0.447        85       263515340       5.89e+08       
+64       12   V5       spread   0.049        85       203832249       4.15e+09       
+64       12   V6       spread   0.065        85       203833957       3.13e+09       
+
+64       13   V1       spread   43.081       106      9255116400      2.15e+08       
+64       13   V2       spread   47.494       106      2224254690      4.68e+07       
+64       13   V3       spread   33.682       106      4423467422      1.31e+08       
+64       13   V4       spread   6.681        106      4250780834      6.36e+08       
+64       13   V5       spread   0.932        106      3919874511      4.20e+09       
+64       13   V6       spread   1.255        106      3919937367      3.12e+09       
+
+96       12   V1       spread   2.221        85       521493827       2.35e+08       
+96       12   V2       spread   2.618        85       130060367       4.97e+07       
+96       12   V3       spread   1.870        85       256013548       1.37e+08       
+96       12   V4       spread   0.315        85       263706164       8.36e+08       
+96       12   V5       spread   0.035        85       203636367       5.87e+09       
+96       12   V6       spread   0.046        85       203638519       4.47e+09       
+
+96       13   V1       spread   43.134       106      9256920757      2.15e+08       
+96       13   V2       spread   47.503       106      2225909496      4.69e+07       
+96       13   V3       spread   33.716       106      4425106361      1.31e+08       
+96       13   V4       spread   4.479        106      4259751359      9.51e+08       
+96       13   V5       spread   0.624        106      3921872061      6.28e+09       
+96       13   V6       spread   0.839        106      3921919373      4.68e+09       
+
+192      12   V1       spread   2.226        85       521744697       2.34e+08       
+192      12   V2       spread   2.617        85       130101098       4.97e+07       
+192      12   V3       spread   1.868        85       256197069       1.37e+08       
+192      12   V4       spread   0.186        85       271093780       1.46e+09       
+192      12   V5       spread   0.022        85       203601194       9.07e+09       
+192      12   V6       spread   0.028        85       203659642       7.35e+09       
+
+192      13   V1       spread   43.190       106      9258848089      2.14e+08       
+192      13   V2       spread   47.472       106      2225698967      4.69e+07       
+192      13   V3       spread   33.672       106      4424089761      1.31e+08       
+192      13   V4       spread   2.276        106      4289855407      1.89e+09       
+192      13   V5       spread   0.323        106      3927687468      1.22e+10       
+192      13   V6       spread   0.435        106      3927696350      9.03e+09       
+
+
+==========================================
+SUMMARY - Best V6 times (close binding)
+==========================================
+
+Threads  n    V1(s)      V2(s)      V3(s)      V4(s)      V5(s)      V6(s)      V6/V1      V6/V5     
+--------------------------------------------------------------------------------------------------------------
+8        12   2.903      3.528      2.518      3.070      0.373      0.499      5.81x      .74x      
+8        13   47.258     49.147     34.821     53.114     7.436      10.009     4.72x      .74x      
+16       12   2.218      2.610      1.861      1.553      0.187      0.251      8.83x      .74x      
+16       13   43.065     47.453     33.659     26.571     3.719      5.005      8.60x      .74x      
+32       12   2.219      2.613      1.861      0.807      0.095      0.127      17.47x     .74x      
+32       13   43.137     47.446     33.723     13.286     1.860      2.504      17.22x     .74x      
+64       12   2.221      2.614      1.865      0.428      0.049      0.066      33.65x     .74x      
+64       13   43.134     47.474     33.709     6.669      0.932      1.254      34.39x     .74x      
+96       12   2.221      2.615      1.867      0.304      0.036      0.047      47.25x     .76x      
+96       13   43.113     47.474     33.707     4.472      0.661      0.894      48.22x     .73x      
+192      12   2.229      2.617      1.866      0.187      0.023      0.028      79.60x     .82x      
+192      13   43.161     47.498     33.732     2.276      0.323      0.435      99.22x     .74x      
+
+==========================================
+BINDING COMPARISON - V6 close vs spread
+==========================================
+
+Threads  n    V6-close(s)  V6-spread(s) Winner     Diff%     
+----------------------------------------------------------------------
+8        12   0.499        0.501        close      .3%       
+8        13   10.009       10.019       close      0%        
+16       12   0.251        0.251        spread     0%        
+16       13   5.005        5.011        close      .1%       
+32       12   0.127        0.127        spread     0%        
+32       13   2.504        2.507        close      .1%       
+64       12   0.066        0.065        spread     1.5%      
+64       13   1.254        1.255        close      0%        
+96       12   0.047        0.046        spread     2.1%      
+96       13   0.894        0.839        spread     6.1%      
+192      12   0.028        0.028        spread     0%        
+192      13   0.435        0.435        spread     0%        
+
+==========================================
+NUMA SCALING - V6 (close binding)
+==========================================
+Note: romeo-c has 2 NUMA domains (96 cores each)
+
+Threads  n    Time(s)      States/sec   Efficiency  
+--------------------------------------------------------------
+8        12   0.499        4.10e+08     100.0%      
+16       12   0.251        8.15e+08     99.0%       
+32       12   0.127        1.61e+09     98.0%       
+64       12   0.066        3.09e+09     94.5%       
+96       12   0.047        4.35e+09     88.4%       
+192      12   0.028        7.25e+09     74.2%       
+
+8        13   10.009       3.92e+08     100.0%      
+16       13   5.005        7.84e+08     99.5%       
+32       13   2.504        1.57e+09     99.7%       
+64       13   1.254        3.13e+09     99.7%       
+96       13   0.894        4.39e+09     93.2%       
+192      13   0.435        9.03e+09     95.8%       
+
+
+==========================================
+Results saved to: results_v1v2v3v4v5v6_comparison.csv
+==========================================
+
+==========================================
+All benchmarks completed!
+==========================================
+End time: Wed Jan  7 21:32:01 CET 2026
+

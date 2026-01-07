@@ -1,0 +1,112 @@
+\chapter{Introduction}
+
+\epigraph{\textit{``The most incomprehensible thing about the world is that it is comprehensible.''}}{--- Albert Einstein}
+
+\section{Contexte}
+
+L'optimisation combinatoire constitue un domaine central de l'informatique théorique et appliquée, caractérisé par la recherche de solutions optimales dans des espaces de configurations discrets et souvent exponentiels. Parmi les problèmes emblématiques de ce domaine, le \textbf{problème des règles de Golomb} occupe une place singulière de par sa simplicité apparente et sa difficulté intrinsèque.
+
+Une \textit{règle de Golomb} est un ensemble de marques positionnées sur une règle graduée tel qu'aucune paire de marques ne mesure la même distance. Formellement, pour un ensemble de $n$ marques $\{m_0, m_1, \ldots, m_{n-1}\}$ avec $m_0 = 0 < m_1 < \cdots < m_{n-1}$, la propriété de Golomb exige que :
+\[
+\forall (i,j) \neq (k,l), \quad m_j - m_i \neq m_l - m_k
+\]
+
+Le problème de la \textbf{règle de Golomb optimale} (OGR, \textit{Optimal Golomb Ruler}) consiste à trouver, pour un nombre de marques $n$ donné, la règle de longueur minimale $m_{n-1}$. Ce problème appartient à la classe des problèmes NP-difficiles : aucun algorithme polynomial n'est connu pour le résoudre, et la complexité croît de manière exponentielle avec $n$.
+
+Les règles de Golomb trouvent des applications concrètes dans plusieurs domaines :
+\begin{itemize}
+    \item \textbf{Radioastronomie} : positionnement optimal des antennes dans les interféromètres pour maximiser les lignes de base distinctes ;
+    \item \textbf{Théorie de l'information} : conception de codes correcteurs d'erreurs et de séquences à faible autocorrélation ;
+    \item \textbf{Télécommunications} : allocation de fréquences sans interférence dans les réseaux à accès multiple.
+\end{itemize}
+
+\subsection{Intérêt du calcul haute performance}
+
+La nature combinatoire du problème OGR rend les approches exhaustives impraticables au-delà de quelques marques : l'espace de recherche croît exponentiellement. À titre d'exemple, la recherche de la règle optimale à 13 marques requiert l'exploration de milliards de configurations.
+
+Le \textbf{calcul haute performance} (HPC, \textit{High-Performance Computing}) offre une réponse à ce défi en permettant :
+\begin{itemize}
+    \item L'exploitation du \textbf{parallélisme à mémoire partagée} via des frameworks comme OpenMP, permettant d'utiliser efficacement les architectures multicœurs modernes ;
+    \item La \textbf{distribution du calcul} sur plusieurs nœuds via MPI (\textit{Message Passing Interface}), élargissant considérablement les ressources computationnelles disponibles ;
+    \item L'application de techniques d'\textbf{optimisation bas niveau} (vectorisation, alignement mémoire, déroulage de boucles) pour maximiser l'efficacité de chaque thread.
+\end{itemize}
+
+Ce projet s'inscrit dans cette démarche : exploiter les paradigmes de programmation parallèle pour repousser les limites de ce qui est calculable dans un temps raisonnable.
+
+\section{Objectifs du projet}
+
+Ce projet poursuit plusieurs objectifs complémentaires, articulés autour de trois axes principaux :
+
+\subsection{Trouver les règles de Golomb optimales}
+
+L'objectif premier est de développer un algorithme de recherche exhaustive capable de trouver les règles de Golomb optimales pour un nombre de marques donné. Cet algorithme doit :
+\begin{itemize}
+    \item Garantir l'\textbf{optimalité} de la solution trouvée (la règle de longueur minimale) ;
+    \item Être \textbf{correct}, c'est-à-dire ne jamais manquer la solution optimale ;
+    \item Utiliser des techniques d'\textbf{élagage} efficaces (\textit{branch-and-bound}) pour réduire drastiquement l'espace de recherche.
+\end{itemize}
+
+\subsection{Accélérer la recherche via le parallélisme}
+
+Le second objectif consiste à paralléliser l'algorithme selon deux paradigmes complémentaires :
+
+\begin{enumerate}
+    \item \textbf{OpenMP} (mémoire partagée) : distribution du travail entre les threads d'un même nœud, avec synchronisation légère et partage de la borne supérieure courante ;
+    \item \textbf{MPI+OpenMP} (architecture hybride) : distribution des sous-problèmes entre processus MPI communiquant selon une topologie en \textit{hypercube}, chaque processus utilisant OpenMP en interne.
+\end{enumerate}
+
+Cette approche hybride vise à combiner les avantages des deux paradigmes : la faible latence d'OpenMP pour la synchronisation intra-nœud et la scalabilité de MPI pour la distribution inter-nœuds.
+
+\subsection{Produire des benchmarks rigoureux}
+
+Le troisième objectif est d'évaluer rigoureusement les performances des différentes implémentations à travers :
+\begin{itemize}
+    \item Des \textbf{mesures de temps d'exécution} sur des configurations variées ($n = 10$ à $n = 14$ marques) ;
+    \item Le calcul de métriques de \textbf{scalabilité} : speedup et efficacité parallèle ;
+    \item Des expérimentations sur le \textbf{supercalculateur Romeo} de l'Université de Reims, avec des configurations allant jusqu'à 192 threads et 32 processus MPI ;
+    \item Une \textbf{comparaison} des différentes versions de l'algorithme (séquentielle, OpenMP, MPI hybride) et des optimisations successives.
+\end{itemize}
+
+\section{Contributions et organisation du rapport}
+
+\subsection{Contributions}
+
+Les principales contributions de ce travail sont les suivantes :
+
+\begin{enumerate}
+    \item \textbf{Implémentation d'un algorithme de backtracking optimisé} : utilisation d'une structure \texttt{BitSet128} permettant la détection de collisions en $O(1)$ via des opérations de décalage binaire, au lieu de $O(n)$ pour l'approche naïve ;
+
+    \item \textbf{Six versions OpenMP} avec des niveaux d'optimisation croissants : de l'approche itérative de base avec déroulage de boucles jusqu'à la version V5 utilisant des opérations \texttt{uint64\_t} directes ;
+
+    \item \textbf{Trois versions MPI+OpenMP} exploitant différentes stratégies de communication : topologie hypercube avec réduction logarithmique et \texttt{MPI\_Allreduce} standard ;
+
+    \item \textbf{Validation expérimentale} sur architectures x86 et ARM, avec des résultats reproduisant les règles optimales connues jusqu'à $n = 14$.
+\end{enumerate}
+
+\subsection{Organisation du rapport}
+
+Ce rapport est structuré en onze chapitres, suivis d'annexes techniques :
+
+\begin{itemize}
+    \item Le \textbf{Chapitre 2} présente les \textit{préliminaires} nécessaires : complexité algorithmique, paradigmes de programmation parallèle (OpenMP, MPI), métriques de performance ;
+
+    \item Le \textbf{Chapitre 3} formalise le \textit{problème des règles de Golomb} : définitions, propriétés, critère d'optimalité et résultats connus ;
+
+    \item Le \textbf{Chapitre 4} détaille l'\textit{approche algorithmique séquentielle} : backtracking, branch-and-bound, élagage et optimisation BitSet128 ;
+
+    \item Le \textbf{Chapitre 5} aborde l'\textit{implémentation C++} et les aspects d'ingénierie logicielle : structures de données, organisation du code, compilation ;
+
+    \item Le \textbf{Chapitre 6} présente la \textit{parallélisation OpenMP} avec les six versions successives et leurs optimisations ;
+
+    \item Le \textbf{Chapitre 7} traite de la \textit{parallélisation hybride MPI+OpenMP}, de la topologie hypercube et de l'équilibrage de charge ;
+
+    \item Le \textbf{Chapitre 8} décrit le \textit{protocole expérimental} et la méthodologie de benchmarking sur le cluster Romeo ;
+
+    \item Le \textbf{Chapitre 9} présente les \textit{résultats} obtenus, leur analyse selon les principes CSAPP, et les leçons du profilage ;
+
+    \item Le \textbf{Chapitre 10} discute des \textit{limites et perspectives} : évolution des versions, limites actuelles, pistes d'amélioration ;
+
+    \item Le \textbf{Chapitre 11} \textit{conclut} ce rapport en résumant les apports, les recommandations pour une V2.0, et les réflexions personnelles.
+\end{itemize}
+
+Les \textbf{Annexes} fournissent les détails techniques : structures de données, commandes de compilation, format CSV des benchmarks, et tables de solutions optimales de référence.

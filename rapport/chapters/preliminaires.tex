@@ -1,0 +1,453 @@
+\chapter{Préliminaires}
+\label{chap:preliminaires}
+
+\epigraph{\textit{``The purpose of computing is insight, not numbers.''}}{--- Richard Hamming}
+
+Ce chapitre introduit les concepts fondamentaux nécessaires à la compréhension des techniques employées dans ce rapport. Nous présentons les notions de complexité algorithmique, les paradigmes de programmation parallèle (OpenMP et MPI), ainsi que les métriques de performance utilisées pour évaluer nos implémentations.
+
+% =============================================================================
+\section{Complexité algorithmique}
+\label{sec:prelim:complexite}
+% =============================================================================
+
+\subsection{Notations asymptotiques}
+
+L'analyse de complexité permet d'évaluer le comportement d'un algorithme en fonction de la taille de l'entrée. Nous utilisons les notations asymptotiques standard :
+
+\begin{definition}[Notation $O$ (grand O)]
+Soit $f, g : \mathbb{N} \to \mathbb{R}^+$. On dit que $f(n) = O(g(n))$ s'il existe des constantes $c > 0$ et $n_0$ telles que :
+\[
+\forall n \geq n_0 : f(n) \leq c \cdot g(n)
+\]
+\end{definition}
+
+\begin{definition}[Notation $\Omega$ (grand Omega)]
+$f(n) = \Omega(g(n))$ si $g(n) = O(f(n))$, c'est-à-dire si $f$ croît au moins aussi vite que $g$.
+\end{definition}
+
+\begin{definition}[Notation $\Theta$ (grand Theta)]
+$f(n) = \Theta(g(n))$ si $f(n) = O(g(n))$ et $f(n) = \Omega(g(n))$, c'est-à-dire si $f$ et $g$ ont le même ordre de croissance.
+\end{definition}
+
+\subsection{Classes de complexité courantes}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Classe} & \textbf{Nom} & \textbf{Exemple} \\
+\midrule
+$O(1)$ & Constante & Accès tableau, opérations bit-à-bit \\
+$O(\log n)$ & Logarithmique & Recherche dichotomique \\
+$O(n)$ & Linéaire & Parcours de tableau \\
+$O(n \log n)$ & Quasi-linéaire & Tri fusion, tri rapide (moyen) \\
+$O(n^2)$ & Quadratique & Tri par insertion, produit matriciel naïf \\
+$O(2^n)$ & Exponentielle & Backtracking exhaustif \\
+$O(n!)$ & Factorielle & Génération de permutations \\
+\bottomrule
+\end{tabular}
+\caption{Classes de complexité courantes}
+\label{tab:complexity_classes}
+\end{table}
+
+\subsection{Problèmes NP-difficiles}
+
+\begin{definition}[Classe NP]
+La classe \textbf{NP} (Nondeterministic Polynomial time) contient les problèmes de décision dont une solution candidate peut être \textit{vérifiée} en temps polynomial.
+\end{definition}
+
+\begin{definition}[Problème NP-difficile]
+Un problème est \textbf{NP-difficile} s'il est au moins aussi difficile que tout problème dans NP. Formellement, tout problème de NP peut être réduit polynomialement à ce problème.
+\end{definition}
+
+Le problème des règles de Golomb optimales est NP-difficile : aucun algorithme polynomial n'est connu pour le résoudre, et la vérification qu'une règle est optimale nécessite une exploration exhaustive de l'espace de recherche.
+
+% =============================================================================
+\section{Programmation parallèle : concepts fondamentaux}
+\label{sec:prelim:parallele}
+% =============================================================================
+
+\subsection{Motivation}
+
+La loi de Moore, qui prédisait un doublement de la densité des transistors tous les 18 mois, a atteint ses limites physiques. Depuis le milieu des années 2000, l'augmentation des performances passe principalement par le parallélisme :
+\begin{itemize}
+    \item \textbf{Multicœur} : plusieurs unités de calcul sur une même puce
+    \item \textbf{SIMD} : une instruction, plusieurs données (vectorisation)
+    \item \textbf{Clusters} : plusieurs machines interconnectées
+\end{itemize}
+
+\subsection{Modèles de parallélisme}
+
+\paragraph{Mémoire partagée.}
+Tous les threads accèdent à un espace mémoire commun. La synchronisation se fait via des mécanismes comme les mutex, les variables atomiques ou les barrières. Ce modèle est utilisé au sein d'un nœud de calcul.
+
+\paragraph{Mémoire distribuée.}
+Chaque processus possède son propre espace mémoire. La communication se fait par passage de messages. Ce modèle est utilisé entre nœuds d'un cluster.
+
+\paragraph{Modèle hybride.}
+Combinaison des deux : mémoire partagée au sein de chaque nœud (OpenMP), mémoire distribuée entre nœuds (MPI). C'est le modèle dominant en HPC.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.8]
+    % Noeud 1
+    \draw[thick, burgundy] (0,0) rectangle (5,4);
+    \node[above] at (2.5,4) {\textbf{Nœud 1}};
+    \draw[fill=gold!30] (0.5,0.5) rectangle (2,1.5);
+    \node at (1.25,1) {Core 0};
+    \draw[fill=gold!30] (2.5,0.5) rectangle (4,1.5);
+    \node at (3.25,1) {Core 1};
+    \draw[fill=gold!30] (0.5,2) rectangle (2,3);
+    \node at (1.25,2.5) {Core 2};
+    \draw[fill=gold!30] (2.5,2) rectangle (4,3);
+    \node at (3.25,2.5) {Core 3};
+    \node at (2.5,3.5) {\small Mémoire partagée};
+
+    % Noeud 2
+    \draw[thick, burgundy] (7,0) rectangle (12,4);
+    \node[above] at (9.5,4) {\textbf{Nœud 2}};
+    \draw[fill=gold!30] (7.5,0.5) rectangle (9,1.5);
+    \node at (8.25,1) {Core 0};
+    \draw[fill=gold!30] (9.5,0.5) rectangle (11,1.5);
+    \node at (10.25,1) {Core 1};
+    \draw[fill=gold!30] (7.5,2) rectangle (9,3);
+    \node at (8.25,2.5) {Core 2};
+    \draw[fill=gold!30] (9.5,2) rectangle (11,3);
+    \node at (10.25,2.5) {Core 3};
+    \node at (9.5,3.5) {\small Mémoire partagée};
+
+    % Réseau
+    \draw[<->, thick, dashed] (5,2) -- (7,2);
+    \node[above] at (6,2.2) {\small MPI};
+    \node[below] at (6,1.8) {\small (réseau)};
+
+    % Labels
+    \node[below] at (2.5,-0.3) {\small OpenMP};
+    \node[below] at (9.5,-0.3) {\small OpenMP};
+\end{tikzpicture}
+\caption{Architecture hybride MPI+OpenMP}
+\label{fig:hybrid_arch}
+\end{figure}
+
+% =============================================================================
+\section{OpenMP : parallélisme à mémoire partagée}
+\label{sec:prelim:openmp}
+% =============================================================================
+
+\subsection{Présentation}
+
+\textbf{OpenMP} (Open Multi-Processing) est une API de programmation parallèle pour les architectures à mémoire partagée. Elle se compose de :
+\begin{itemize}
+    \item \textbf{Directives de compilation} : pragmas \texttt{\#pragma omp}
+    \item \textbf{Fonctions de bibliothèque} : \texttt{omp\_get\_thread\_num()}, etc.
+    \item \textbf{Variables d'environnement} : \texttt{OMP\_NUM\_THREADS}, etc.
+\end{itemize}
+
+\subsection{Modèle fork-join}
+
+OpenMP utilise le modèle \textbf{fork-join} :
+\begin{enumerate}
+    \item Le programme démarre avec un thread \textit{master}
+    \item À l'entrée d'une région parallèle, le master \textit{fork} : création de threads
+    \item Les threads exécutent le travail en parallèle
+    \item À la sortie, les threads se synchronisent (\textit{join}) et seul le master continue
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.9]
+    % Timeline
+    \draw[thick, ->] (0,0) -- (14,0) node[right] {temps};
+
+    % Master thread
+    \draw[thick, burgundy] (0,0.5) -- (2,0.5);
+    \draw[thick, burgundy] (10,0.5) -- (14,0.5);
+    \node[left] at (0,0.5) {Master};
+
+    % Fork
+    \draw[thick, burgundy, dashed] (2,0.5) -- (3,2);
+    \draw[thick, burgundy, dashed] (2,0.5) -- (3,1);
+    \draw[thick, burgundy, dashed] (2,0.5) -- (3,0);
+    \draw[thick, burgundy, dashed] (2,0.5) -- (3,-1);
+
+    % Parallel region
+    \draw[thick, gold] (3,2) -- (9,2);
+    \draw[thick, gold] (3,1) -- (9,1);
+    \draw[thick, gold] (3,0) -- (9,0);
+    \draw[thick, gold] (3,-1) -- (9,-1);
+    \node at (6,2.5) {\small Thread 0};
+    \node at (6,1.5) {\small Thread 1};
+    \node at (6,-0.5) {\small Thread 2};
+    \node at (6,-1.5) {\small Thread 3};
+
+    % Join
+    \draw[thick, burgundy, dashed] (9,2) -- (10,0.5);
+    \draw[thick, burgundy, dashed] (9,1) -- (10,0.5);
+    \draw[thick, burgundy, dashed] (9,0) -- (10,0.5);
+    \draw[thick, burgundy, dashed] (9,-1) -- (10,0.5);
+
+    % Labels
+    \node[above] at (2,0.7) {\small fork};
+    \node[above] at (10,0.7) {\small join};
+    \draw[decorate, decoration={brace, amplitude=5pt}] (3,-1.8) -- (9,-1.8);
+    \node[below] at (6,-2.3) {Région parallèle};
+\end{tikzpicture}
+\caption{Modèle fork-join d'OpenMP}
+\label{fig:prelim:fork_join}
+\end{figure}
+
+\subsection{Directives principales}
+
+\begin{lstlisting}[language=C++, caption={Directives OpenMP fondamentales}]
+// Région parallèle de base
+#pragma omp parallel
+{
+    int tid = omp_get_thread_num();
+    // Code exécuté par chaque thread
+}
+
+// Parallélisation de boucle
+#pragma omp parallel for schedule(dynamic, 1)
+for (int i = 0; i < n; ++i) {
+    process(i);
+}
+
+// Section critique (exclusion mutuelle)
+#pragma omp critical
+{
+    shared_variable += local_result;
+}
+
+// Réduction
+int sum = 0;
+#pragma omp parallel for reduction(+:sum)
+for (int i = 0; i < n; ++i) {
+    sum += array[i];
+}
+\end{lstlisting}
+
+\subsection{Ordonnancement des boucles}
+
+La clause \texttt{schedule} contrôle la distribution des itérations :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Schedule} & \textbf{Description} \\
+\midrule
+\texttt{static} & Division égale des itérations, assignation fixe \\
+\texttt{dynamic} & Assignation à la demande (équilibrage de charge) \\
+\texttt{guided} & Blocs de taille décroissante \\
+\texttt{auto} & Choix laissé au compilateur/runtime \\
+\bottomrule
+\end{tabular}
+\caption{Politiques d'ordonnancement OpenMP}
+\label{tab:schedule}
+\end{table}
+
+Pour notre problème avec des sous-arbres de tailles très variables, \texttt{schedule(dynamic, 1)} est optimal : chaque thread prend une nouvelle tâche dès qu'il termine la précédente.
+
+% =============================================================================
+\section{MPI : parallélisme à mémoire distribuée}
+\label{sec:prelim:mpi}
+% =============================================================================
+
+\subsection{Présentation}
+
+\textbf{MPI} (Message Passing Interface) est le standard de facto pour la programmation parallèle à mémoire distribuée. Chaque processus MPI possède :
+\begin{itemize}
+    \item Son propre espace mémoire (pas de partage direct)
+    \item Un rang unique dans un \textit{communicateur}
+    \item La capacité d'envoyer/recevoir des messages
+\end{itemize}
+
+\subsection{Communications point-à-point}
+
+Les communications de base sont les envois et réceptions entre deux processus :
+
+\begin{lstlisting}[language=C++, caption={Communications MPI point-à-point}]
+int rank, size;
+MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+if (rank == 0) {
+    int data = 42;
+    MPI_Send(&data, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+} else if (rank == 1) {
+    int data;
+    MPI_Recv(&data, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+}
+\end{lstlisting}
+
+\subsection{Communications collectives}
+
+Les opérations collectives impliquent tous les processus d'un communicateur :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Opération} & \textbf{Description} \\
+\midrule
+\texttt{MPI\_Bcast} & Diffusion d'un processus vers tous \\
+\texttt{MPI\_Scatter} & Distribution de données (1 vers N) \\
+\texttt{MPI\_Gather} & Collecte de données (N vers 1) \\
+\texttt{MPI\_Reduce} & Réduction avec opération (somme, min, max...) \\
+\texttt{MPI\_Allreduce} & Réduction avec résultat sur tous les processus \\
+\texttt{MPI\_Barrier} & Synchronisation globale \\
+\bottomrule
+\end{tabular}
+\caption{Opérations collectives MPI}
+\label{tab:mpi_collective}
+\end{table}
+
+Pour notre problème, \texttt{MPI\_Allreduce} avec l'opération \texttt{MPI\_MIN} permet de propager efficacement la meilleure borne connue à tous les processus.
+
+\subsection{Topologie hypercube}
+
+Une topologie \textbf{hypercube} de dimension $d$ connecte $2^d$ nœuds. Chaque nœud est identifié par un nombre binaire de $d$ bits, et deux nœuds sont voisins si leurs identifiants diffèrent d'exactement un bit.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.2]
+    % Hypercube 3D
+    \node[circle, draw, fill=gold!30] (000) at (0,0) {000};
+    \node[circle, draw, fill=gold!30] (001) at (2,0) {001};
+    \node[circle, draw, fill=gold!30] (010) at (0,2) {010};
+    \node[circle, draw, fill=gold!30] (011) at (2,2) {011};
+    \node[circle, draw, fill=gold!30] (100) at (1,0.7) {100};
+    \node[circle, draw, fill=gold!30] (101) at (3,0.7) {101};
+    \node[circle, draw, fill=gold!30] (110) at (1,2.7) {110};
+    \node[circle, draw, fill=gold!30] (111) at (3,2.7) {111};
+
+    % Arêtes
+    \draw[thick] (000) -- (001) -- (011) -- (010) -- (000);
+    \draw[thick] (100) -- (101) -- (111) -- (110) -- (100);
+    \draw[thick] (000) -- (100);
+    \draw[thick] (001) -- (101);
+    \draw[thick] (010) -- (110);
+    \draw[thick] (011) -- (111);
+\end{tikzpicture}
+\caption{Topologie hypercube de dimension 3 (8 nœuds)}
+\label{fig:prelim:hypercube}
+\end{figure}
+
+Propriétés de l'hypercube :
+\begin{itemize}
+    \item \textbf{Diamètre} : $d$ (distance maximale entre deux nœuds)
+    \item \textbf{Degré} : $d$ (nombre de voisins par nœud)
+    \item \textbf{Diffusion} : $O(\log P)$ étapes pour atteindre tous les nœuds
+\end{itemize}
+
+% =============================================================================
+\section{Métriques de performance parallèle}
+\label{sec:prelim:metriques}
+% =============================================================================
+
+\subsection{Speedup}
+
+\begin{definition}[Speedup]
+Le \textbf{speedup} $S(p)$ mesure l'accélération obtenue avec $p$ processeurs par rapport à l'exécution séquentielle :
+\begin{equation}
+S(p) = \frac{T_1}{T_p}
+\end{equation}
+où $T_1$ est le temps séquentiel et $T_p$ le temps avec $p$ processeurs.
+\end{definition}
+
+Le speedup idéal (linéaire) est $S(p) = p$. En pratique, on observe $S(p) < p$ à cause des overheads de parallélisation.
+
+\subsection{Efficacité}
+
+\begin{definition}[Efficacité]
+L'\textbf{efficacité} $E(p)$ mesure l'utilisation des ressources :
+\begin{equation}
+E(p) = \frac{S(p)}{p} = \frac{T_1}{p \cdot T_p}
+\end{equation}
+\end{definition}
+
+Une efficacité de 100\% correspond au speedup linéaire idéal. En pratique, on vise $E(p) > 80\%$.
+
+\subsection{Loi d'Amdahl}
+
+\begin{theorem}[Loi d'Amdahl]
+Si une fraction $f$ du code est intrinsèquement séquentielle, le speedup maximal est borné par :
+\begin{equation}
+S_{max} = \lim_{p \to \infty} S(p) = \frac{1}{f}
+\end{equation}
+\end{theorem}
+
+\begin{example}
+Si 5\% du code est séquentiel ($f = 0.05$), le speedup maximal est $1/0.05 = 20$, quelle que soit le nombre de processeurs.
+\end{example}
+
+Cette loi souligne l'importance de paralléliser la plus grande partie possible du code.
+
+\subsection{Loi de Gustafson}
+
+La loi de Gustafson offre une perspective plus optimiste en considérant que la taille du problème augmente avec les ressources :
+
+\begin{theorem}[Loi de Gustafson]
+Si on augmente la taille du problème proportionnellement aux ressources, le speedup devient :
+\begin{equation}
+S(p) = p - f(p-1)
+\end{equation}
+\end{theorem}
+
+Pour notre problème de recherche de règles de Golomb, augmenter $n$ augmente l'espace de recherche de manière exponentielle, ce qui offre plus de parallélisme (\textit{weak scaling}).
+
+% =============================================================================
+\section{Optimisation de code : principes fondamentaux}
+\label{sec:prelim:optim}
+% =============================================================================
+
+\subsection{Hiérarchie mémoire}
+
+Les processeurs modernes utilisent une hiérarchie de caches pour masquer la latence de la mémoire principale :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Niveau} & \textbf{Taille typique} & \textbf{Latence} & \textbf{Bande passante} \\
+\midrule
+Registres & $\sim$1 Ko & $<$1 ns & $\sim$TB/s \\
+Cache L1 & 32-64 Ko & 1-2 ns & $\sim$1 TB/s \\
+Cache L2 & 256 Ko - 1 Mo & 3-10 ns & $\sim$500 GB/s \\
+Cache L3 & 8-64 Mo & 10-40 ns & $\sim$200 GB/s \\
+RAM & 16-256 Go & 50-100 ns & $\sim$50 GB/s \\
+\bottomrule
+\end{tabular}
+\caption{Hiérarchie mémoire typique (AMD EPYC)}
+\label{tab:memory_hierarchy}
+\end{table}
+
+\subsection{Localité des données}
+
+\begin{definition}[Localité temporelle]
+Un programme a une bonne \textbf{localité temporelle} s'il réutilise les données récemment accédées.
+\end{definition}
+
+\begin{definition}[Localité spatiale]
+Un programme a une bonne \textbf{localité spatiale} s'il accède à des données proches en mémoire.
+\end{definition}
+
+Ces principes guident la conception de structures de données efficaces. Notre structure \texttt{BitSet128} (16 octets) est conçue pour tenir entièrement dans les registres CPU.
+
+\subsection{Prédiction de branchement}
+
+Les processeurs modernes utilisent la \textbf{prédiction de branchement} pour anticiper le résultat des conditions. Une mauvaise prédiction coûte 10-20 cycles.
+
+Stratégies d'optimisation :
+\begin{itemize}
+    \item Éviter les branches dans les boucles critiques
+    \item Utiliser des opérations sans branchement (\textit{branchless})
+    \item Aider le compilateur avec \texttt{[[likely]]} et \texttt{[[unlikely]]}
+\end{itemize}
+
+\begin{lstlisting}[language=C++, caption={Utilisation des attributs de prédiction}]
+if (condition) [[unlikely]] {
+    // Code rarement exécuté
+    handleError();
+}
+\end{lstlisting}

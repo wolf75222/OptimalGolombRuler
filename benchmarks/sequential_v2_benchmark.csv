@@ -1,3 +1,0 @@
-timestamp,date,n,threads,length,time_s,speedup,efficiency_pct,states,changes
-2026-01-07 21:14:28,2026-01-07,9,1,44,0.00348,1.00,100.0,289178,"Sequential V2 (BitSet128)"
-2026-01-07 21:14:28,2026-01-07,10,1,55,0.02624,1.00,100.0,2047267,"Sequential V2 (BitSet128)"

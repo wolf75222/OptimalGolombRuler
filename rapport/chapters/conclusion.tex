@@ -1,0 +1,218 @@
+\chapter{Conclusion}
+\label{chap:conclusion}
+
+Ce chapitre conclut notre étude du problème des règles de Golomb optimales en dressant le bilan du projet, en synthétisant les apports techniques et méthodologiques, et en formulant des recommandations pour une hypothétique version 2.0 du projet. Nous partageons également les réflexions personnelles et les perspectives que ce travail a ouvertes.
+
+% =============================================================================
+\section{Bilan du projet}
+\label{sec:conclusion:bilan}
+% =============================================================================
+
+\subsection{Objectifs atteints}
+
+Les objectifs initiaux du projet ont été pleinement atteints :
+
+\begin{enumerate}
+    \item \textbf{Résolution exacte} : Notre solveur trouve les règles de Golomb optimales prouvées pour $n \leq 13$, avec des résultats validés contre les valeurs de référence de la littérature.
+
+    \item \textbf{Parallélisation OpenMP} : Six versions successives ont été développées, culminant avec la V5 qui atteint un speedup de $1236\times$ par rapport à la baseline séquentielle sur 192 cœurs.
+
+    \item \textbf{Parallélisation MPI+OpenMP} : Trois versions hybrides permettent l'exécution distribuée sur plusieurs nœuds de calcul, avec des patterns de communication optimisés (hypercube, Allreduce).
+
+    \item \textbf{Benchmarking rigoureux} : Une infrastructure complète de benchmarking a été mise en place, avec scripts SLURM reproductibles et export CSV pour analyse.
+\end{enumerate}
+
+\subsection{Chiffres clés}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lc}
+\toprule
+Métrique & Valeur \\
+\midrule
+Versions implémentées & 11 (2 séq. + 6 OpenMP + 3 MPI) \\
+Speedup algorithme (V2/V1 séq.) & $5.7\times$ \\
+Speedup parallèle (192 threads) & $217\times$ \\
+Speedup total (V5 192t / V1 séq.) & $1236\times$ \\
+Débit maximal atteint & $1.22 \times 10^{10}$ états/s \\
+Efficacité parallèle à 192 threads & 96\% ($n=13$) \\
+\bottomrule
+\end{tabular}
+\caption{Métriques clés du projet}
+\label{tab:conclusion:metrics}
+\end{table}
+
+% =============================================================================
+\section{Apports et contributions}
+\label{sec:conclusion:apports}
+% =============================================================================
+
+\subsection{Contribution technique : BitSet128}
+
+L'apport technique principal est la structure \texttt{BitSet128}, une représentation compacte sur mesure qui transforme la vérification des contraintes de Golomb de $O(k)$ à $O(1)$. Cette optimisation, simple en apparence, a nécessité une compréhension profonde du problème et de l'architecture matérielle.
+
+\begin{lstlisting}[language=C++, caption={L'innovation clé : détection de collision en O(1)}]
+// Calcul de TOUTES les nouvelles différences en une opération
+BitSet128 new_dist = reversed_marks << offset;
+// Test de collision en une instruction AND
+if ((new_dist & used_dist).any()) continue;
+\end{lstlisting}
+
+\subsection{Contribution méthodologique : approche itérative}
+
+Le projet démontre l'importance d'une approche itérative guidée par la mesure :
+\begin{enumerate}
+    \item Implémenter une version fonctionnelle
+    \item Mesurer et identifier les bottlenecks
+    \item Optimiser le hot path
+    \item Répéter jusqu'à rendements décroissants
+\end{enumerate}
+
+Cette méthodologie, appliquée systématiquement, a permis des gains cumulés de trois ordres de grandeur.
+
+\subsection{Contribution pédagogique}
+
+Le projet illustre concrètement plusieurs concepts fondamentaux du calcul haute performance :
+\begin{itemize}
+    \item Complexité algorithmique vs optimisation de constantes
+    \item Hiérarchie mémoire et localité des données
+    \item Parallélisme à mémoire partagée (OpenMP) et distribuée (MPI)
+    \item Profilage et mesure de performance
+    \item Trade-offs entre abstraction et performance
+\end{itemize}
+
+% =============================================================================
+\section{Recommandations pour une V2.0}
+\label{sec:conclusion:v2}
+% =============================================================================
+
+Si ce projet devait être repris ou étendu, voici les recommandations issues de notre expérience.
+
+\subsection{Profiler dès le premier jour}
+
+\begin{recommendation}
+\textbf{Utiliser un profileur immédiatement, avant toute optimisation théorique.}
+\end{recommendation}
+
+C'est la leçon la plus importante de ce projet. Nous avons initialement passé du temps à appliquer des optimisations ``de manuel'' --- déroulement de boucles, prefetch, alignement mémoire --- guidés par les principes théoriques de CSAPP et d'autres références. Ces optimisations, bien que valides en général, n'étaient pas toujours pertinentes pour \textit{notre} code spécifique.
+
+L'utilisation de \textbf{Very Sleepy} sur Windows nous a immédiatement révélé que :
+\begin{itemize}
+    \item 43\% du temps était passé dans \texttt{bitset::any()}
+    \item 33\% du temps était passé dans l'opérateur de décalage
+    \item Le reste du code était négligeable
+\end{itemize}
+
+Cette information, obtenue en quelques minutes de profilage, valait plus que des heures de réflexion théorique. Elle a directement motivé la création de \texttt{BitSet128}.
+
+\begin{quote}
+\textit{``Suivre le hot path et optimiser par la pratique, pas par la théorie.''}
+\end{quote}
+
+Les principes de CSAPP restent précieux pour \textit{comprendre} pourquoi une optimisation fonctionne, mais le profileur doit guider \textit{quoi} optimiser.
+
+\subsection{Instrumenter les métriques dès le départ}
+
+L'obsession pour les \textbf{états par seconde} a été un fil conducteur essentiel. Cette métrique unique, affichée à chaque exécution, permettait de :
+\begin{itemize}
+    \item Comparer instantanément deux versions
+    \item Détecter les régressions de performance
+    \item Quantifier l'impact de chaque changement
+\end{itemize}
+
+Pour une V2.0, nous recommandons d'ajouter dès le départ :
+\begin{itemize}
+    \item Compteurs de cache misses (si accessible)
+    \item Compteurs de branch mispredictions
+    \item Temps passé dans chaque phase (génération préfixes, recherche, merge)
+\end{itemize}
+
+\subsection{Éviter la sur-ingénierie précoce}
+
+La V6, notre tentative d'optimisation ``ultime'' avec intrinsèques SIMD et préchargement manuel, était plus lente que la V5. Le compilateur, avec \texttt{-O3 -march=native}, optimisait mieux que nous.
+
+\begin{recommendation}
+\textbf{Faire confiance au compilateur pour les micro-optimisations.} Se concentrer sur l'algorithme et la structure des données.
+\end{recommendation}
+
+\subsection{Architecture V2.0 suggérée}
+
+\begin{enumerate}
+    \item \textbf{Cœur algorithmique} : Conserver \texttt{BitSet128} avec backtracking itératif
+    \item \textbf{Parallélisation} : OpenMP tasks avec work stealing natif
+    \item \textbf{Bornes} : Intégrer des bornes plus serrées (programmation linéaire)
+    \item \textbf{Monitoring} : Dashboard temps réel des métriques de performance
+    \item \textbf{Tests} : Suite de regression automatisée sur chaque commit
+\end{enumerate}
+
+% =============================================================================
+\section{Réflexions personnelles}
+\label{sec:conclusion:reflexions}
+% =============================================================================
+
+Ce projet a été une expérience formatrice qui dépasse le cadre purement technique.
+
+\subsection{La fascination des nanosecondes}
+
+Suivre l'évolution des états par seconde --- de $2.3 \times 10^7$ à $1.22 \times 10^{10}$ --- a été une source de motivation constante. Chaque optimisation réussie, chaque gain de 10\%, 50\%, $2\times$, procurait une satisfaction immédiate et mesurable.
+
+Cette obsession de la performance m'a fait réaliser pourquoi certains domaines comme le \textbf{trading haute fréquence (HFT)} exercent une telle attraction sur les développeurs passionnés. Dans ces environnements où chaque \textit{microseconde} --- voire \textit{nanoseconde} --- compte, le code est poussé à ses limites absolues :
+
+\begin{itemize}
+    \item Allocation mémoire interdite dans le hot path
+    \item Structures de données lock-free
+    \item Affinité CPU et isolation de cœurs
+    \item Bypass du kernel avec DPDK/SPDK
+    \item FPGA pour les chemins critiques
+\end{itemize}
+
+Ce projet, à son échelle, m'a donné un avant-goût de cette quête de performance extrême.
+
+\subsection{L'équilibre théorie-pratique}
+
+Les principes de CSAPP --- localité, pipeline, prédiction de branchement --- forment un socle théorique indispensable. Ils permettent de \textit{comprendre} pourquoi le code est lent et d'avoir une intuition sur les solutions possibles.
+
+Mais la pratique du profilage est irremplaçable. Le code réel, exécuté sur du matériel réel, se comporte parfois de manière surprenante. Seule la mesure permet de trancher.
+
+\begin{quote}
+\textit{``In theory, theory and practice are the same. In practice, they are not.''} \\ --- Attribué à Yogi Berra
+\end{quote}
+
+La V6 en est la parfaite illustration : théoriquement optimale, pratiquement plus lente.
+
+\subsection{Compétences acquises}
+
+Au-delà du problème des règles de Golomb, ce projet a développé des compétences transférables :
+
+\begin{itemize}
+    \item \textbf{C++ moderne} : C++20, templates, constexpr, attributs
+    \item \textbf{Parallélisme} : OpenMP, MPI, synchronisation atomique
+    \item \textbf{Profilage} : Very Sleepy, instrumentation manuelle
+    \item \textbf{HPC} : SLURM, architecture NUMA, binding CPU
+    \item \textbf{Méthodologie} : Benchmarking rigoureux, reproductibilité
+\end{itemize}
+
+Ces compétences sont directement applicables dans de nombreux domaines : calcul scientifique, jeux vidéo, systèmes embarqués, finance quantitative...
+
+% =============================================================================
+\section{Mot de la fin}
+\label{sec:conclusion:fin}
+% =============================================================================
+
+Le problème des règles de Golomb, en apparence simple --- placer des marques sur une règle --- cache une complexité combinatoire redoutable qui en fait un excellent terrain d'expérimentation pour les techniques de calcul haute performance.
+
+De la première version naïve explorant $2.3 \times 10^7$ états par seconde à la V5 atteignant $1.22 \times 10^{10}$ états par seconde, le chemin parcouru représente trois ordres de grandeur d'amélioration. Chaque étape a apporté son lot d'enseignements, parfois attendus (l'algorithme prime), parfois surprenants (le compilateur optimise mieux que nous).
+
+\begin{result}
+Ce projet démontre que l'optimisation de code est autant un art qu'une science : elle requiert des connaissances théoriques solides, mais surtout une pratique rigoureuse guidée par la mesure. Le profileur est le meilleur ami du développeur performance.
+\end{result}
+
+Pour conclure, nous retiendrons cette maxime qui résume l'esprit de ce travail :
+
+\begin{center}
+\large\textit{``Measure. Don't guess.''}
+\end{center}
+
+\vspace{1cm}
+
+\noindent\textit{Le code source complet est disponible sur le dépôt du projet, accompagné des scripts de benchmark et des résultats expérimentaux.}

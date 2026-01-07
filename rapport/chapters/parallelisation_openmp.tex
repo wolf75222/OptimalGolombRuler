@@ -1,0 +1,564 @@
+\chapter{Parallélisation OpenMP}
+
+\epigraph{\textit{``The real problem is that programmers have spent far too much time worrying about efficiency in the wrong places.''}}{--- Donald Knuth}
+
+\section{Objectif : accélérer sur un nœud}
+
+\subsection{Contexte et motivation}
+
+OpenMP (\textit{Open Multi-Processing}) est une API de programmation parallèle pour systèmes à \textbf{mémoire partagée}. Elle permet d'exploiter les multiples cœurs d'un processeur moderne au sein d'un même nœud de calcul.
+
+\begin{defi}{Modèle fork-join}
+OpenMP suit un modèle \textit{fork-join} :
+\begin{enumerate}
+    \item Le programme démarre avec un \textbf{thread maître} ;
+    \item À une région parallèle, le maître \textit{fork} une équipe de threads ;
+    \item Les threads travaillent en parallèle ;
+    \item À la fin de la région, les threads se \textit{joignent} au maître.
+\end{enumerate}
+\end{defi}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.8]
+    % Timeline
+    \draw[thick, ->] (0,0) -- (14,0) node[right] {temps};
+
+    % Master thread
+    \draw[very thick, burgundy] (0,0.5) -- (2,0.5);
+    \node[above, burgundy] at (1, 0.6) {Master};
+
+    % Fork
+    \draw[thick, burgundy, ->] (2,0.5) -- (3,2);
+    \draw[thick, burgundy, ->] (2,0.5) -- (3,1);
+    \draw[thick, burgundy, ->] (2,0.5) -- (3,0);
+    \draw[thick, burgundy, ->] (2,0.5) -- (3,-1);
+
+    % Parallel work
+    \draw[thick, gold] (3,2) -- (10,2) node[midway, above] {Thread 0};
+    \draw[thick, gold] (3,1) -- (10,1) node[midway, above] {Thread 1};
+    \draw[thick, gold] (3,0) -- (10,0) node[midway, above] {Thread 2};
+    \draw[thick, gold] (3,-1) -- (10,-1) node[midway, above] {Thread 3};
+
+    % Join
+    \draw[thick, burgundy, ->] (10,2) -- (11,0.5);
+    \draw[thick, burgundy, ->] (10,1) -- (11,0.5);
+    \draw[thick, burgundy, ->] (10,0) -- (11,0.5);
+    \draw[thick, burgundy, ->] (10,-1) -- (11,0.5);
+
+    % Master continues
+    \draw[very thick, burgundy] (11,0.5) -- (13,0.5);
+
+    % Labels
+    \node at (2, -2) {fork};
+    \node at (11, -2) {join};
+    \draw[dashed] (2,-1.5) -- (2,2.5);
+    \draw[dashed] (11,-1.5) -- (11,2.5);
+\end{tikzpicture}
+\caption{Modèle fork-join d'OpenMP}
+\label{fig:fork_join}
+\end{figure}
+
+\subsection{Avantages pour notre problème}
+
+Le problème OGR se prête bien à la parallélisation OpenMP pour plusieurs raisons :
+
+\begin{itemize}
+    \item \textbf{Indépendance des branches} : chaque sous-arbre de recherche peut être exploré indépendamment ;
+    \item \textbf{Partage de la borne} : la meilleure solution courante ($bestLen$) peut être partagée efficacement en mémoire partagée ;
+    \item \textbf{Faible surcoût de synchronisation} : seule la mise à jour de $bestLen$ nécessite une synchronisation.
+\end{itemize}
+
+\subsection{Évolution des versions}
+
+Cinq versions OpenMP ont été développées, chacune apportant des optimisations spécifiques :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{clp{6cm}}
+\toprule
+\textbf{Version} & \textbf{Approche} & \textbf{Optimisations clés} \\
+\midrule
+V1 & Itérative simple & Loop unrolling 4x, pile manuelle \\
+V2 & Récursive + bitset & \texttt{bitset<256>} shift O(1) \\
+V3 & Hybride & Itératif + bitset shift \\
+V4 & Préfixes + bitset & Génération de préfixes, meilleur équilibrage \\
+V5 & BitSet128 + préfixes & \texttt{uint64\_t} natif, performances maximales \\
+\bottomrule
+\end{tabular}
+\caption{Évolution des versions OpenMP}
+\label{tab:openmp_versions}
+\end{table}
+
+\section{Décomposition du travail}
+
+\subsection{Approche initiale : distribution par firstMark (V1)}
+
+La première approche distribue les branches de premier niveau entre les threads :
+
+\begin{lstlisting}[language=C++, caption={Distribution simple par firstMark (V1)}]
+#pragma omp parallel
+{
+    #pragma omp for schedule(dynamic, 1)
+    for (int firstMark = 1; firstMark <= maxLen; ++firstMark) {
+        // Chaque thread explore un sous-arbre complet
+        backtrackIterative(firstMark, ...);
+    }
+}
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.7,
+    level distance=1.5cm,
+    sibling distance=2cm,
+    edge from parent/.style={draw, -latex},
+]
+    \node[draw, circle, fill=burgundy!20] (root) {$\{0\}$}
+        child { node[draw, circle, fill=gold!30] {$m_1=1$}
+            child { node[draw, circle, fill=gold!10] {...} }
+            child { node[draw, circle, fill=gold!10] {...} }
+        }
+        child { node[draw, circle, fill=blue!30] {$m_1=2$}
+            child { node[draw, circle, fill=blue!10] {...} }
+            child { node[draw, circle, fill=blue!10] {...} }
+        }
+        child { node[draw, circle, fill=green!30] {$m_1=3$}
+            child { node[draw, circle, fill=green!10] {...} }
+        }
+        child { node[draw, circle, fill=red!30] {$m_1=4$}
+            child { node[draw, circle, fill=red!10] {...} }
+        };
+
+    % Legend
+    \node[right] at (6, 0) {Thread 0};
+    \node[right] at (6, -1) {Thread 1};
+    \node[right] at (6, -2) {Thread 2};
+    \node[right] at (6, -3) {Thread 3};
+
+    \draw[fill=gold!30] (5.5, -0.15) rectangle (6, 0.15);
+    \draw[fill=blue!30] (5.5, -1.15) rectangle (6, -0.85);
+    \draw[fill=green!30] (5.5, -2.15) rectangle (6, -1.85);
+    \draw[fill=red!30] (5.5, -3.15) rectangle (6, -2.85);
+\end{tikzpicture}
+\caption{Distribution des branches de premier niveau entre threads}
+\label{fig:firstmark_distribution}
+\end{figure}
+
+\textbf{Problème} : les branches ont des tailles très différentes. La branche $m_1 = 1$ est beaucoup plus grande que $m_1 = 50$, créant un déséquilibre de charge.
+
+\subsection{Approche par génération de préfixes (V4, V5)}
+
+Pour améliorer l'équilibrage, les versions V4 et V5 génèrent d'abord tous les \textbf{préfixes valides} jusqu'à une profondeur $D$, puis distribuent ces préfixes entre les threads.
+
+\begin{lstlisting}[language=C++, caption={Génération de préfixes (V5)}]
+// PHASE 1: Generation sequentielle des prefixes
+std::vector<WorkItemV5> prefixes;
+generatePrefixesV5(reversed_marks, used_dist, 1, 0,
+                   prefixDepth, n, maxLen + 1, prefixes);
+
+// PHASE 2: Exploration parallele des prefixes
+#pragma omp parallel
+{
+    #pragma omp for schedule(dynamic, 1)
+    for (int i = 0; i < numPrefixes; ++i) {
+        const WorkItemV5& prefix = prefixes[i];
+        backtrackIterativeV5(prefix, ...);
+    }
+}
+\end{lstlisting}
+
+\subsubsection{Choix de la profondeur de préfixe}
+
+La profondeur optimale dépend de $n$ et du nombre de threads :
+
+\begin{lstlisting}[language=C++, caption={Calcul automatique de la profondeur}]
+static int computePrefixDepthV5(int n, int numThreads) {
+    if (n <= 6)  return 2;
+    if (n <= 8)  return 3;
+    if (n <= 10) return 3;
+    if (n <= 12) return 4;
+    if (n <= 14) return 4;
+    if (n <= 16) return 5;
+    // ...
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ccc}
+\toprule
+\textbf{Ordre $n$} & \textbf{Profondeur $D$} & \textbf{Préfixes générés (approx.)} \\
+\midrule
+6--8 & 3 & $\sim$100 \\
+9--10 & 3 & $\sim$500 \\
+11--12 & 4 & $\sim$5 000 \\
+13--14 & 4 & $\sim$50 000 \\
+15--16 & 5 & $\sim$500 000 \\
+\bottomrule
+\end{tabular}
+\caption{Profondeur de préfixe et nombre de tâches générées}
+\label{tab:prefix_depth}
+\end{table}
+
+\subsection{Granularité des tâches}
+
+La granularité représente le compromis entre :
+\begin{itemize}
+    \item \textbf{Granularité fine} (nombreuses petites tâches) : meilleur équilibrage, mais surcoût de scheduling ;
+    \item \textbf{Granularité grossière} (peu de grandes tâches) : moins de surcoût, mais risque de déséquilibre.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.9]
+    \begin{axis}[
+        xlabel={Nombre de tâches},
+        ylabel={Performance},
+        xmode=log,
+        grid=major,
+        width=10cm,
+        height=6cm,
+        legend pos=south east,
+    ]
+    % Courbe conceptuelle
+    \addplot[thick, burgundy, smooth] coordinates {
+        (10, 30) (50, 60) (200, 85) (1000, 95) (5000, 98)
+        (20000, 97) (100000, 90) (500000, 80)
+    };
+    \addlegendentry{Performance relative}
+
+    % Zone optimale
+    \draw[fill=green!20, opacity=0.5] (axis cs:500, 0) rectangle (axis cs:50000, 100);
+    \end{axis}
+
+    \node at (5, 0.5) {\small Zone optimale};
+\end{tikzpicture}
+\caption{Impact de la granularité sur la performance}
+\label{fig:granularity}
+\end{figure}
+
+\section{Ordonnancement et équilibrage}
+
+\subsection{Politiques d'ordonnancement OpenMP}
+
+OpenMP propose plusieurs politiques pour distribuer les itérations :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Politique} & \textbf{Description} \\
+\midrule
+\texttt{static} & Division en blocs de taille fixe, assignation circulaire \\
+\texttt{dynamic} & Attribution à la demande, taille de bloc configurable \\
+\texttt{guided} & Blocs décroissants, commence grand puis réduit \\
+\texttt{auto} & Laisse le runtime choisir \\
+\bottomrule
+\end{tabular}
+\caption{Politiques d'ordonnancement OpenMP}
+\label{tab:scheduling}
+\end{table}
+
+\subsection{Choix de \texttt{dynamic}}
+
+Notre implémentation utilise \texttt{schedule(dynamic, 1)} :
+
+\begin{lstlisting}[language=C++]
+#pragma omp for schedule(dynamic, 1)
+for (int i = 0; i < numPrefixes; ++i) {
+    // ...
+}
+\end{lstlisting}
+
+\textbf{Justification} :
+
+\begin{enumerate}
+    \item \textbf{Tâches de taille variable} : même avec la génération de préfixes, les sous-arbres ont des tailles différentes selon l'élagage ;
+
+    \item \textbf{Chunk size = 1} : chaque thread demande une nouvelle tâche dès qu'il termine, minimisant le temps d'inactivité ;
+
+    \item \textbf{Surcoût acceptable} : le temps d'exploration d'un préfixe ($\sim$ms) domine largement le surcoût d'ordonnancement ($\sim\mu$s).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.6]
+    % Static scheduling
+    \node[anchor=west] at (-2, 6) {\textbf{static}};
+    \foreach \t in {0,1,2,3} {
+        \draw (0, 5.5-\t*0.8) -- (12, 5.5-\t*0.8);
+        \node[left] at (0, 5.5-\t*0.8) {T\t};
+    }
+    % Blocks for static
+    \foreach \x/\w/\c in {0/2/gold, 2/3/gold, 5/1.5/gold, 6.5/4/gold} {
+        \fill[\c!50] (\x, 5.3) rectangle (\x+\w, 5.7);
+    }
+    \foreach \x/\w/\c in {0/1/blue, 1/2.5/blue, 3.5/3/blue, 6.5/2/blue} {
+        \fill[\c!50] (\x, 4.5) rectangle (\x+\w, 4.9);
+    }
+    \foreach \x/\w/\c in {0/3/green, 3/1/green, 4/2/green, 6/5/green} {
+        \fill[\c!50] (\x, 3.7) rectangle (\x+\w, 4.1);
+    }
+    \foreach \x/\w/\c in {0/0.5/red, 0.5/1.5/red, 2/1/red, 3/8/red} {
+        \fill[\c!50] (\x, 2.9) rectangle (\x+\w, 3.3);
+    }
+    \draw[thick, red, dashed] (10.5, 2.9) -- (10.5, 5.7);
+    \node[red] at (11.5, 4.3) {idle};
+
+    % Dynamic scheduling
+    \node[anchor=west] at (-2, 1) {\textbf{dynamic}};
+    \foreach \t in {0,1,2,3} {
+        \draw (0, 0.5-\t*0.8) -- (12, 0.5-\t*0.8);
+        \node[left] at (0, 0.5-\t*0.8) {T\t};
+    }
+    % Better balanced
+    \foreach \x/\w in {0/2, 2/1.5, 3.5/2, 5.5/1.5, 7/1, 8/0.5} {
+        \fill[gold!50] (\x, 0.3) rectangle (\x+\w, 0.7);
+    }
+    \foreach \x/\w in {0/1, 1/2.5, 3.5/1.5, 5/2, 7/1.5} {
+        \fill[blue!50] (\x, -0.5) rectangle (\x+\w, -0.1);
+    }
+    \foreach \x/\w in {0/3, 3/1.5, 4.5/2, 6.5/2} {
+        \fill[green!50] (\x, -1.3) rectangle (\x+\w, -0.9);
+    }
+    \foreach \x/\w in {0/0.5, 0.5/3, 3.5/2, 5.5/3} {
+        \fill[red!50] (\x, -2.1) rectangle (\x+\w, -1.7);
+    }
+    \draw[thick, green!50!black, dashed] (8.5, -2.1) -- (8.5, 0.7);
+    \node[green!50!black] at (10, -0.7) {meilleur};
+\end{tikzpicture}
+\caption{Comparaison \texttt{static} vs \texttt{dynamic} : l'ordonnancement dynamique réduit le temps d'inactivité}
+\label{fig:static_vs_dynamic}
+\end{figure}
+
+\subsection{Pourquoi pas \texttt{guided} ?}
+
+La politique \texttt{guided} commence avec de grands blocs et les réduit progressivement. Elle est moins adaptée car :
+\begin{itemize}
+    \item Les premières tâches assignées en gros blocs peuvent créer un déséquilibre initial ;
+    \item Avec des tâches de taille très variable, la décroissance des blocs ne correspond pas à la réalité de notre problème.
+\end{itemize}
+
+\section{Synchronisation autour de la borne}
+
+\subsection{Le problème de la borne partagée}
+
+Tous les threads partagent la meilleure longueur trouvée ($bestLen$). Cette valeur doit être :
+\begin{itemize}
+    \item \textbf{Lue fréquemment} : pour le pruning efficace ;
+    \item \textbf{Mise à jour atomiquement} : quand une meilleure solution est trouvée.
+\end{itemize}
+
+\subsection{Solution : variables atomiques avec CAS}
+
+Nous utilisons \texttt{std::atomic<int>} avec l'opération \textbf{Compare-And-Swap} (CAS) :
+
+\begin{lstlisting}[language=C++, caption={Mise à jour atomique de la borne globale}]
+std::atomic<int> globalBestLen(maxLen + 1);
+
+// Dans le hot path - lecture relaxee (faible cout)
+const int currentGlobal = globalBestLen.load(std::memory_order_relaxed);
+if (ruler_length + minAdditional >= currentGlobal) {
+    continue;  // Pruning
+}
+
+// Quand une solution est trouvee - CAS
+if (solutionLen < threadBest.bestLen) {
+    threadBest.bestLen = solutionLen;
+    // ...
+
+    // Mise a jour globale avec CAS
+    int expected = globalBestLen.load(std::memory_order_relaxed);
+    while (solutionLen < expected &&
+           !globalBestLen.compare_exchange_weak(expected, solutionLen,
+               std::memory_order_release, std::memory_order_relaxed)) {
+        // Retry si un autre thread a mis a jour entre-temps
+    }
+}
+\end{lstlisting}
+
+\subsection{Ordres mémoire utilisés}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Opération} & \textbf{Ordre} & \textbf{Justification} \\
+\midrule
+Lecture (pruning) & \texttt{relaxed} & Pas critique si on lit une ancienne valeur ; on élaguera moins, mais correctement \\
+Lecture avant CAS & \texttt{relaxed} & Même raison \\
+CAS succès & \texttt{release} & Les autres threads verront la nouvelle valeur \\
+CAS échec & \texttt{relaxed} & On va réessayer de toute façon \\
+\bottomrule
+\end{tabular}
+\caption{Ordres mémoire et justifications}
+\label{tab:memory_orders}
+\end{table}
+
+\subsection{Double-check et thread-local best}
+
+Pour minimiser les accès atomiques, chaque thread maintient sa propre meilleure solution :
+
+\begin{lstlisting}[language=C++, caption={Pattern thread-local best}]
+struct ThreadBest {
+    int bestLen;
+    int bestMarks[MAX_MARKS];
+    int bestNumMarks;
+};
+
+#pragma omp parallel
+{
+    ThreadBest threadBest;
+    threadBest.bestLen = maxLen + 1;
+
+    // ... exploration ...
+
+    // A la fin: fusion des resultats locaux
+    #pragma omp critical(merge_best)
+    {
+        if (threadBest.bestLen < finalBestLen) {
+            finalBestLen = threadBest.bestLen;
+            // Copier la solution
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle, draw=burgundy, fill=burgundy!10, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
+    arrow/.style={->, thick}
+]
+    % Global
+    \node[box, fill=gold!30] (global) {globalBestLen\\(atomic)};
+
+    % Thread locals
+    \node[box, below left=2cm and 1cm of global] (t0) {Thread 0\\local best};
+    \node[box, below=2cm of global] (t1) {Thread 1\\local best};
+    \node[box, below right=2cm and 1cm of global] (t2) {Thread 2\\local best};
+
+    % Arrows
+    \draw[arrow, dashed] (global) -- (t0) node[midway, left] {\small read};
+    \draw[arrow, dashed] (global) -- (t1) node[midway, left] {\small read};
+    \draw[arrow, dashed] (global) -- (t2) node[midway, right] {\small read};
+
+    \draw[arrow, thick, red] (t0) -- (global) node[midway, left, red] {\small CAS};
+    \draw[arrow, thick, red] (t1) -- (global);
+    \draw[arrow, thick, red] (t2) -- (global) node[midway, right, red] {\small CAS};
+
+    % Final merge
+    \node[box, fill=green!20, below=4cm of global] (final) {Final Best\\(critical)};
+    \draw[arrow] (t0) -- (final);
+    \draw[arrow] (t1) -- (final);
+    \draw[arrow] (t2) -- (final);
+\end{tikzpicture}
+\caption{Architecture de synchronisation : lectures relaxées fréquentes, CAS rares}
+\label{fig:sync_architecture}
+\end{figure}
+
+\section{Analyse des limites}
+
+\subsection{Contention sur la borne}
+
+Bien que minimisée, la contention existe lors des mises à jour de \texttt{globalBestLen}. Elle est particulièrement notable :
+\begin{itemize}
+    \item En début de recherche, quand plusieurs threads trouvent des solutions rapidement ;
+    \item Avec un grand nombre de threads (>64).
+\end{itemize}
+
+\textbf{Mesures de mitigation} :
+\begin{itemize}
+    \item Ordres mémoire relaxés pour les lectures ;
+    \item CAS plutôt que mutex (non-bloquant) ;
+    \item Thread-local best pour réduire les écritures.
+\end{itemize}
+
+\subsection{Surcoût de scheduling}
+
+L'ordonnancement \texttt{dynamic} induit un surcoût :
+
+\begin{equation}
+T_{overhead} = N_{tasks} \times t_{schedule}
+\end{equation}
+
+où $t_{schedule} \approx 1\mu s$ par attribution de tâche.
+
+Pour $N_{tasks} = 50\,000$ préfixes :
+\[
+T_{overhead} \approx 50\,000 \times 1\mu s = 50\,ms
+\]
+
+Ce surcoût est négligeable face au temps total de calcul ($\sim$minutes pour $n \geq 12$).
+
+\subsection{Scalabilité et loi d'Amdahl}
+
+La loi d'Amdahl limite le speedup maximal :
+
+\begin{equation}
+S(p) = \frac{1}{f + \frac{1-f}{p}}
+\end{equation}
+
+où $f$ est la fraction séquentielle (génération des préfixes, fusion des résultats).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.9]
+    \begin{axis}[
+        xlabel={Nombre de threads $p$},
+        ylabel={Speedup $S(p)$},
+        grid=major,
+        width=10cm,
+        height=6cm,
+        legend pos=north west,
+        xmin=1, xmax=200,
+        ymin=0, ymax=100,
+    ]
+    % Speedup idéal
+    \addplot[thick, dashed, gray, domain=1:200] {x};
+    \addlegendentry{Idéal ($S = p$)}
+
+    % f = 1%
+    \addplot[thick, burgundy, domain=1:200] {1/(0.01 + 0.99/x)};
+    \addlegendentry{$f = 1\%$ (max 100)}
+
+    % f = 5%
+    \addplot[thick, gold, domain=1:200] {1/(0.05 + 0.95/x)};
+    \addlegendentry{$f = 5\%$ (max 20)}
+
+    % f = 10%
+    \addplot[thick, blue, domain=1:200] {1/(0.10 + 0.90/x)};
+    \addlegendentry{$f = 10\%$ (max 10)}
+    \end{axis}
+\end{tikzpicture}
+\caption{Loi d'Amdahl : impact de la fraction séquentielle sur le speedup}
+\label{fig:amdahl}
+\end{figure}
+
+Dans notre cas, $f < 1\%$ pour $n \geq 12$ : la génération des préfixes et la fusion sont rapides face à l'exploration.
+
+\subsection{Déséquilibre résiduel}
+
+Malgré la génération de préfixes, un déséquilibre persiste car :
+\begin{itemize}
+    \item Certains préfixes mènent à des sous-arbres plus grands ;
+    \item L'élagage dépend de $bestLen$, qui évolue pendant l'exécution ;
+    \item Les threads qui explorent après une amélioration de $bestLen$ font moins de travail.
+\end{itemize}
+
+Ce déséquilibre est \textbf{bénéfique} : il reflète l'élagage dynamique qui accélère globalement la recherche.
+
+\subsection{Limites matérielles}
+
+Au-delà d'un certain nombre de threads, les performances saturent :
+\begin{itemize}
+    \item \textbf{Bande passante mémoire} : les accès concurrents saturent le bus ;
+    \item \textbf{Cache thrashing} : avec trop de threads, les données sont évincées du cache ;
+    \item \textbf{NUMA effects} : sur systèmes multi-sockets, les accès distants sont plus lents.
+\end{itemize}
+
+\begin{important}{Recommandation}
+Sur nos tests, l'efficacité parallèle reste supérieure à 60\% jusqu'à $\sim$64 threads. Au-delà, les gains diminuent mais restent positifs jusqu'à $\sim$192 threads sur architecture adaptée (serveur multi-socket).
+\end{important}
