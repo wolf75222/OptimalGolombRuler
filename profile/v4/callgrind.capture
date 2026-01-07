@@ -1,0 +1,345 @@
+# callgrind format
+event: t : Microseconds Spent Total
+event: ps : Microseconds Spent Per Second
+events: t ps
+cmd: ?
+desc: Wed Jan 07 20:00:23 2026
+
+ob=(1) 
+fl=(1) 
+fn=(1) [0000000000000001]
+cob=(2) golomb_openmp_v4
+cfl=(1)
+cfn=(2) [00007FFED3D19CCA]
+calls=153 0
+0 16557895 967789
+cob=(2)
+cfl=(1)
+cfn=(3) [00007FFED3D18B13]
+calls=1 0
+0 2162 126
+cob=(1)
+cfl=(1)
+cfn=(1)
+calls=154 0
+0 16560058 967915
+cob=(1)
+cfl=(1)
+cfn=(4) [0000008A2C6FF920]
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(5) [0000000000000030]
+cob=(1)
+cfl=(1)
+cfn=(1)
+calls=154 0
+0 16560058 967915
+
+ob=(1)
+fl=(1)
+fn=(4)
+cob=(2)
+cfl=(1)
+cfn=(6) [00007FFED3D11801]
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(7) [0000008A2C6FF940]
+cob=(1)
+cfl=(1)
+cfn=(8) [0000008A2C6FFBD8]
+calls=153 0
+0 16557895 967789
+cob=(1)
+cfl=(1)
+cfn=(7)
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(9) [0000008A2C6FFAE0]
+cob=(1)
+cfl=(1)
+cfn=(10) [0000008A2C6FFAE4]
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(10)
+cob=(1)
+cfl=(1)
+cfn=(5)
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(11) [0000008A2C6FFBD0]
+cob=(1)
+cfl=(1)
+cfn=(9)
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(8)
+cob=(1)
+cfl=(1)
+cfn=(11)
+calls=153 0
+0 16557895 967789
+
+ob=(1)
+fl=(1)
+fn=(12) [0000020C00000000]
+cob=(1)
+cfl=(1)
+cfn=(13) [0000020C67362CE0]
+calls=1 0
+0 2162 126
+
+ob=(1)
+fl=(1)
+fn=(14) [0000020C67358080]
+cob=(1)
+cfl=(1)
+cfn=(12)
+calls=1 0
+0 2162 126
+
+ob=(1)
+fl=(1)
+fn=(13)
+cob=(2)
+cfl=(1)
+cfn=(15) [00007FFED3D11A47]
+calls=1 0
+0 2162 126
+
+ob=(2)
+fl=(2) C:/Users/romai/dev/golomb/OptimalGolombRuler/src/search_v4.cpp
+fn=(16) generatePrefixes
+93 27841 1627
+117 4025 235
+136 2006 117
+cob=(2)
+cfl=(3) C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/include/vector
+cfn=(17) std::vector<WorkItemV4,std::allocator<WorkItemV4> >::_Emplace_reallocate<WorkItemV4 const &>
+calls=6 916
+94 56245 3287
+cob=(2)
+cfl=(2)
+cfn=(16)
+calls=37 93
+133 266328 15567
+
+ob=(2)
+fl=(2)
+fn=(18) backtrackIterativeV4
+150 641608 37501
+158 93012 5436
+161 197494 11543
+168 43767 2558
+172 3793 222
+177 35222 2059
+179 87024 5086
+181 283833 16590
+182 21516 1258
+189 34013 1988
+190 675637 39490
+193 7403946 432752
+200 1998 117
+222 29839 1744
+226 63052 3685
+227 520061 30397
+230 71607 4185
+231 295426 17267
+233 37017 2164
+237 294757 17228
+243 2003 117
+cob=(2)
+cfl=(4) C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/include/bitset
+cfn=(19) std::bitset<256>::operator<<=
+calls=46 270
+193 5721268 334401
+
+ob=(2)
+fl=(2)
+fn=(20) searchGolombV4
+cob=(2)
+cfl=(2)
+cfn=(16)
+calls=13 93
+320 90118 5267
+cob=(2)
+cfl=(5) minkernel/crts/ucrt/src/appcrt/heap/align.cpp
+cfn=(21) _aligned_free
+calls=1 545
+381 2128 124
+
+ob=(2)
+fl=(4)
+fn=(19)
+270 1004252 58697
+271 156310 9136
+272 60476 3535
+274 20026 1170
+278 162170 9479
+280 2575426 150530
+283 1058313 61857
+287 684294 39996
+
+ob=(2)
+fl=(3)
+fn=(17)
+cob=(2)
+cfl=(5)
+cfn=(21)
+calls=1 545
+916 5999 351
+cob=(2)
+cfl=(6) D:/a/_work/1/s/src/vctools/crt/vcruntime/src/string/amd64/memcpy.asm
+cfn=(22) memcpy
+calls=5 438
+916 50246 2937
+
+ob=(2)
+fl=(7) C:/Users/romai/dev/golomb/OptimalGolombRuler/src/main_openmp_v4.cpp
+fn=(23) main
+cob=(2)
+cfl=(8) C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/include/__msvc_ostream.hpp
+cfn=(24) std::operator<<<std::char_traits<char> >
+calls=1 791
+38 2091 122
+cob=(2)
+cfl=(2)
+cfn=(20)
+calls=14 320
+49 92245 5392
+cob=(2)
+cfl=(8)
+cfn=(24)
+calls=1 791
+63 3809 223
+
+ob=(2)
+fl=(8)
+fn=(24)
+cob=(2)
+cfl=(9) D:/a/_work/1/s/src/vctools/crt/github/stl/inc/__msvc_filebuf.hpp
+cfn=(25) std::basic_filebuf<char,std::char_traits<char> >::xsputn
+calls=2 604
+791 5900 345
+
+ob=(2)
+fl=(9)
+fn=(25)
+cob=(2)
+cfl=(10) minkernel/crts/ucrt/src/appcrt/stdio/fwrite.cpp
+cfn=(26) fwrite
+calls=2 53
+604 5900 345
+
+ob=(2)
+fl=(11) D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl
+fn=(27) __scrt_common_main_seh
+cob=(2)
+cfl=(7)
+cfn=(23)
+calls=16 38
+288 98145 5736
+
+ob=(2)
+fl=(10)
+fn=(26)
+53 5900 345
+
+ob=(2)
+fl=(5)
+fn=(21)
+cob=(2)
+cfl=(12) minkernel/crts/ucrt/src/appcrt/heap/free_base.cpp
+cfn=(28) _free_base
+calls=2 105
+545 8127 475
+
+ob=(2)
+fl=(12)
+fn=(28)
+cob=(3) ntdll
+cfl=(13) [unknown]
+cfn=(29) RtlFreeHeap
+calls=2 0
+105 8127 475
+
+ob=(2)
+fl=(2)
+fn=(30) searchGolombV4$omp$1
+cob=(2)
+cfl=(2)
+cfn=(18)
+calls=153 158
+332 16557895 967789
+
+ob=(2)
+fl=(6)
+fn=(22)
+438 8078 472
+441 25950 1517
+442 8000 468
+444 2015 118
+446 6203 363
+
+ob=(2)
+fl=(1)
+fn=(6)
+cob=(1)
+cfl=(1)
+cfn=(7)
+calls=153 0
+0 16557895 967789
+
+ob=(2)
+fl=(1)
+fn=(15)
+cob=(1)
+cfl=(1)
+cfn=(5)
+calls=1 0
+0 2162 126
+
+ob=(2)
+fl=(1)
+fn=(3)
+cob=(4) KERNELBASE
+cfl=(13)
+cfn=(31) CreateRemoteThreadEx
+calls=1 0
+0 2162 126
+
+ob=(2)
+fl=(1)
+fn=(2)
+cob=(2)
+cfl=(2)
+cfn=(30)
+calls=153 332
+0 16557895 967789
+
+ob=(4)
+fl=(13)
+fn=(31)
+0 2162 126
+
+ob=(3)
+fl=(13)
+fn=(29)
+0 8127 475

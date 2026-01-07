@@ -36,7 +36,15 @@
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && call scripts\\\\build_mpi.bat dev 2>&1\")",
       "Bash(cmd.exe /c \"where cl.exe 2>&1\")",
       "Bash(cmd.exe /c:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(xperf:*)",
+      "Bash(where:*)",
+      "Bash(scriptsbuild_openmp_v4.bat)",
+      "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; .\\\\scripts\\\\build_openmp_v4.bat\")",
+      "Bash(powershell.exe -Command \"ls ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler\\\\build\\\\*.pdb''\")",
+      "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; .\\\\scripts\\\\build_openmp_v5.bat\")",
+      "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; Write-Host ''=== V4 ==='' -ForegroundColor Cyan; .\\\\build\\\\golomb_openmp_v4.exe 12; Write-Host ''''; Write-Host ''=== V5 ==='' -ForegroundColor Cyan; .\\\\build\\\\golomb_openmp_v5.exe 12\")",
+      "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; Write-Host ''=== V4 \\(n=13\\) ==='' -ForegroundColor Cyan; .\\\\build\\\\golomb_openmp_v4.exe 13; Write-Host ''''; Write-Host ''=== V5 \\(n=13\\) ==='' -ForegroundColor Cyan; .\\\\build\\\\golomb_openmp_v5.exe 13\")"
     ],
     "deny": [],
     "ask": []

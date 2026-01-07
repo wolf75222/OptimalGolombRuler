@@ -1,0 +1,67 @@
+Name,Exclusive secs,Inclusive secs,% Exclusive,% Inclusive,Module,Source File,Source Line
+"[0000000000000001]",0,16.5601,0,96.9316,"","",0
+"[0000000000000030]",0,16.5601,0,96.9316,"","",0
+"[0000008A2C6FF920]",0,16.5579,0,96.919,"","",0
+"[0000008A2C6FF940]",0,16.5579,0,96.919,"","",0
+"[0000008A2C6FFAE0]",0,16.5579,0,96.919,"","",0
+"[0000008A2C6FFAE4]",0,16.5579,0,96.919,"","",0
+"[0000008A2C6FFBD0]",0,16.5579,0,96.919,"","",0
+"[0000008A2C6FFBD8]",0,16.5579,0,96.919,"","",0
+"[0000020C00000000]",0,0.0021623,0,0.0126567,"","",0
+"[0000020C67358080]",0,0.0021623,0,0.0126567,"","",0
+"[0000020C67362CE0]",0,0.0021623,0,0.0126567,"","",0
+"generatePrefixes",0.0338729,0.0901178,0.19827,0.52749,"golomb_openmp_v4","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_v4.cpp",93
+"backtrackIterativeV4",10.8366,16.5579,63.4304,96.919,"golomb_openmp_v4","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_v4.cpp",158
+"searchGolombV4",0,0.0922455,0,0.539944,"golomb_openmp_v4","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_v4.cpp",320
+"std::bitset<256>::operator<<=",5.72127,5.72127,33.4885,33.4885,"golomb_openmp_v4","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\bitset",270
+"std::vector<WorkItemV4,std::allocator<WorkItemV4> >::_Emplace_reallocate<WorkItemV4 const &>",0,0.0562449,0,0.32922,"golomb_openmp_v4","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\vector",916
+"main",0,0.0981455,0,0.574479,"golomb_openmp_v4","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\main_openmp_v4.cpp",38
+"std::operator<<<std::char_traits<char> >",0,0.0059,0,0.0345347,"golomb_openmp_v4","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\__msvc_ostream.hpp",791
+"std::basic_filebuf<char,std::char_traits<char> >::xsputn",0,0.0059,0,0.0345347,"golomb_openmp_v4","D:\a\_work\1\s\src\vctools\crt\github\stl\inc\__msvc_filebuf.hpp",604
+"__scrt_common_main_seh",0,0.0981455,0,0.574479,"golomb_openmp_v4","D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl",288
+"__acrt_stdio_flush_nolock",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\stdio\fflush.cpp",241
+"__crt_seh_guarded_call<unsigned __int64>::operator()<<lambda_a2589f19c515cac03caf6db9c38355e9>,<lambda_26974eb511f701c600fccfa2a97a8e1b> &,<lambda_ad9ce2f38261e34e8a422b9cc35dfe8d> >",0,0,0,0,"golomb_openmp_v4","VCCRT\vcruntime\inc\internal_shared.h",204
+"<lambda_26974eb511f701c600fccfa2a97a8e1b>::operator()",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",42
+"_fwrite_internal",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",37
+"fwrite",0.0059,0.0059,0.0345347,0.0345347,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",53
+"_aligned_free",0,0.0081267,0,0.0475683,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\heap\align.cpp",545
+"_free_base",0,0.0081267,0,0.0475683,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\heap\free_base.cpp",105
+"__acrt_stdio_end_temporary_buffering_nolock",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\stdio\_sftbuf.cpp",135
+"write_text_ansi_nolock",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",443
+"_write_internal",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",65
+"_write_nolock",0,0,0,0,"golomb_openmp_v4","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",710
+"searchGolombV4$omp$1",0,16.5579,0,96.919,"golomb_openmp_v4","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_v4.cpp",332
+"memcpy",0.0502459,0.0502459,0.294106,0.294106,"golomb_openmp_v4","D:\a\_work\1\s\src\vctools\crt\vcruntime\src\string\amd64\memcpy.asm",438
+"[00007FFED3D11801]",0,16.5579,0,96.919,"golomb_openmp_v4","",0
+"[00007FFED3D11A47]",0,0.0021623,0,0.0126567,"golomb_openmp_v4","",0
+"[00007FFED3D18B13]",0,0.0021623,0,0.0126567,"golomb_openmp_v4","",0
+"[00007FFED3D19CCA]",0,16.5579,0,96.919,"golomb_openmp_v4","",0
+"PcwRegisterCounterSet",0,0,0,0,"KERNELBASE","[unknown]",0
+"ChrCmpIA",0,0,0,0,"KERNELBASE","[unknown]",0
+"WriteFile",0,0,0,0,"KERNELBASE","[unknown]",0
+"RemovePackageDependency",0,0,0,0,"KERNELBASE","[unknown]",0
+"CreateRemoteThreadEx",0.0021623,0.0021623,0.0126567,0.0126567,"KERNELBASE","[unknown]",0
+"AttachConsole",0,0,0,0,"KERNELBASE","[unknown]",0
+"BaseThreadInitThunk",0,0.0981455,0,0.574479,"KERNEL32","[unknown]",0
+"RtlDeleteElementGenericTableAvlEx",0,0,0,0,"ntdll","[unknown]",0
+"RtlRaiseException",0,0,0,0,"ntdll","[unknown]",0
+"LdrGetDllHandleEx",0,0,0,0,"ntdll","[unknown]",0
+"RtlAllocateHeap",0,0,0,0,"ntdll","[unknown]",0
+"LdrLoadDll",0,0,0,0,"ntdll","[unknown]",0
+"RtlpGetDeviceFamilyInfoEnum",0,0,0,0,"ntdll","[unknown]",0
+"TpWaitForWork",0,0,0,0,"ntdll","[unknown]",0
+"RtlCreateTimer",0,0,0,0,"ntdll","[unknown]",0
+"RtlFreeHeap",0.0081267,0.0081267,0.0475683,0.0475683,"ntdll","[unknown]",0
+"RtlUserThreadStart",0,0.0981455,0,0.574479,"ntdll","[unknown]",0
+"LdrGetProcedureAddress",0,0,0,0,"ntdll","[unknown]",0
+"LdrGetProcedureAddressForCaller",0,0,0,0,"ntdll","[unknown]",0
+"LdrLockLoaderLock",0,0,0,0,"ntdll","[unknown]",0
+"EtwEventWriteNoRegistration",0,0,0,0,"ntdll","[unknown]",0
+"RtlDestroyHeap",0,0,0,0,"ntdll","[unknown]",0
+"LdrInitializeThunk",0.426067,0.426067,2.49391,2.49391,"ntdll","[unknown]",0
+"RtlEncodeRemotePointer",0,0,0,0,"ntdll","[unknown]",0
+"NtWriteFile",0,0,0,0,"ntdll","[unknown]",0
+"ZwFreeVirtualMemory",0,0,0,0,"ntdll","[unknown]",0
+"NtCreateFile",0,0,0,0,"ntdll","[unknown]",0
+"NtCreateThreadEx",0,0,0,0,"ntdll","[unknown]",0
+"ZwCreateTimer2",0,0,0,0,"ntdll","[unknown]",0
