@@ -1,0 +1,61 @@
+Name,Exclusive secs,Inclusive secs,% Exclusive,% Inclusive,Module,Source File,Source Line
+"[0000000000000220]",0,0.0020059,0,0.0433627,"","",0
+"[00000000FFFFFFFD]",0,0.0020059,0,0.0433627,"","",0
+"[0000017DF5909AB0]",0,0.0020006,0,0.0432481,"","",0
+"[0000017DF5910FA0]",0,0.0020006,0,0.0432481,"","",0
+"[0000017DF5D70860]",0,0.0020059,0,0.0433627,"","",0
+"backtrackIterativeV2",4.24255,4.24255,91.7137,91.7137,"golomb_sequential_v2_debug","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_sequential_v2.cpp",148
+"searchGolombSequentialV2",0,4.24255,0,91.7137,"golomb_sequential_v2_debug","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\search_sequential_v2.cpp",282
+"runSingleN",0,4.24655,0,91.8001,"golomb_sequential_v2_debug","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\main_sequential_v2.cpp",203
+"main",0,4.24655,0,91.8001,"golomb_sequential_v2_debug","C:\Users\romai\dev\golomb\OptimalGolombRuler\src\main_sequential_v2.cpp",268
+"std::operator<<<std::char_traits<char> >",0,0.0020031,0,0.0433022,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\__msvc_ostream.hpp",791
+"std::basic_filebuf<char,std::char_traits<char> >::xsputn",0,0.0020031,0,0.0433022,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\__msvc_filebuf.hpp",604
+"std::basic_filebuf<char,std::char_traits<char> >::overflow",0,0.0019936,0,0.0430968,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\__msvc_filebuf.hpp",438
+"std::basic_ostream<char,std::char_traits<char> >::operator<<",0,0.0019936,0,0.0430968,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\__msvc_ostream.hpp",293
+"std::num_put<char,std::ostreambuf_iterator<char,std::char_traits<char> > >::do_put",0,0.0019936,0,0.0430968,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\xlocnum",1320
+"std::num_put<char,std::ostreambuf_iterator<char,std::char_traits<char> > >::_Iput",0,0.0019936,0,0.0430968,"golomb_sequential_v2_debug","C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\xlocnum",1617
+"__scrt_common_main_seh",0,4.24655,0,91.8001,"golomb_sequential_v2_debug","D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl",288
+"_fputc_internal",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fputc.cpp",57
+"fputc",0.0019936,0.0019936,0.0430968,0.0430968,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fputc.cpp",72
+"__acrt_stdio_flush_nolock",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fflush.cpp",241
+"__crt_seh_guarded_call<unsigned __int64>::operator()<<lambda_a2589f19c515cac03caf6db9c38355e9>,<lambda_26974eb511f701c600fccfa2a97a8e1b> &,<lambda_ad9ce2f38261e34e8a422b9cc35dfe8d> >",0,0,0,0,"golomb_sequential_v2_debug","VCCRT\vcruntime\inc\internal_shared.h",204
+"<lambda_26974eb511f701c600fccfa2a97a8e1b>::operator()",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",42
+"_fwrite_internal",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",37
+"fwrite",0.0020031,0.0020031,0.0433022,0.0433022,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\fwrite.cpp",53
+"write_buffer_nolock<char>",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\_flsbuf.cpp",102
+"__acrt_stdio_flush_and_write_narrow_nolock",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\_flsbuf.cpp",201
+"write_text_ansi_nolock",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",443
+"_write_internal",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",65
+"_write_nolock",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\lowio\write.cpp",710
+"__acrt_stdio_end_temporary_buffering_nolock",0,0,0,0,"golomb_sequential_v2_debug","minkernel\crts\ucrt\src\appcrt\stdio\_sftbuf.cpp",135
+"[00007FFF3033505A]",0,0.0020006,0,0.0432481,"golomb_sequential_v2_debug","",0
+"PcwRegisterCounterSet",0,0,0,0,"KERNELBASE","[unknown]",0
+"ChrCmpIA",0,0,0,0,"KERNELBASE","[unknown]",0
+"WriteFile",0,0,0,0,"KERNELBASE","[unknown]",0
+"RemovePackageDependency",0,0,0,0,"KERNELBASE","[unknown]",0
+"AttachConsole",0,0,0,0,"KERNELBASE","[unknown]",0
+"[00007FFF3483D6B0]",0.0020059,0.0020059,0.0433627,0.0433627,"KERNELBASE","",0
+"BaseThreadInitThunk",0,4.24655,0,91.8001,"KERNEL32","[unknown]",0
+"RtlAppendUnicodeStringToString",0,0,0,0,"ntdll","[unknown]",0
+"RtlInsertElementGenericTableFullAvl",0,0,0,0,"ntdll","[unknown]",0
+"RtlDeleteElementGenericTableAvlEx",0,0,0,0,"ntdll","[unknown]",0
+"RtlRaiseException",0,0,0,0,"ntdll","[unknown]",0
+"LdrGetDllHandleEx",0,0,0,0,"ntdll","[unknown]",0
+"RtlAllocateHeap",0,0,0,0,"ntdll","[unknown]",0
+"LdrLoadDll",0,0,0,0,"ntdll","[unknown]",0
+"RtlSetBits",0,0,0,0,"ntdll","[unknown]",0
+"RtlCreateHeap",0,0,0,0,"ntdll","[unknown]",0
+"TpSetWaitEx",0,0,0,0,"ntdll","[unknown]",0
+"RtlUserThreadStart",0,4.24655,0,91.8001,"ntdll","[unknown]",0
+"LdrGetProcedureAddress",0,0,0,0,"ntdll","[unknown]",0
+"LdrGetProcedureAddressForCaller",0,0,0,0,"ntdll","[unknown]",0
+"LdrLockLoaderLock",0,0,0,0,"ntdll","[unknown]",0
+"RtlCheckPortableOperatingSystem",0,0,0,0,"ntdll","[unknown]",0
+"EtwEventWriteNoRegistration",0,0,0,0,"ntdll","[unknown]",0
+"LdrInitializeThunk",0.375312,0.375312,8.11333,8.11333,"ntdll","[unknown]",0
+"RtlEncodeRemotePointer",0,0,0,0,"ntdll","[unknown]",0
+"NtWriteFile",0,0,0,0,"ntdll","[unknown]",0
+"NtAllocateVirtualMemory",0,0,0,0,"ntdll","[unknown]",0
+"NtMapViewOfSection",0,0,0,0,"ntdll","[unknown]",0
+"NtUnmapViewOfSection",0.0020006,0.0020006,0.0432481,0.0432481,"ntdll","[unknown]",0
+"NtCreateFile",0,0,0,0,"ntdll","[unknown]",0
