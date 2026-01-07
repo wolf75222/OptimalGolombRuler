@@ -44,6 +44,7 @@ SRCS_SEQ    = $(SRC_DIR)/search_sequential.cpp $(SRC_DIR)/main_sequential.cpp
 SRCS_OPENMP = $(SRC_DIR)/search.cpp $(SRC_DIR)/main_openmp.cpp
 SRCS_OPENMP_V2 = $(SRC_DIR)/search_v2.cpp $(SRC_DIR)/main_openmp_v2.cpp
 SRCS_OPENMP_V3 = $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_openmp_v3.cpp
+SRCS_OPENMP_V4 = $(SRC_DIR)/search_v4.cpp $(SRC_DIR)/main_openmp_v4.cpp
 SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
 SRCS_COMPARE = $(SRC_DIR)/search.cpp $(SRC_DIR)/search_v2.cpp $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_benchmark_compare.cpp
 
@@ -52,6 +53,7 @@ OBJS_SEQ    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq_%.o,$(SRCS_SEQ))
 OBJS_OPENMP = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS_OPENMP))
 OBJS_OPENMP_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v2_%.o,$(SRCS_OPENMP_V2))
 OBJS_OPENMP_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v3_%.o,$(SRCS_OPENMP_V3))
+OBJS_OPENMP_V4 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v4_%.o,$(SRCS_OPENMP_V4))
 OBJS_MPI    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi_%.o,$(SRCS_MPI))
 OBJS_COMPARE = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/cmp_%.o,$(SRCS_COMPARE))
 
@@ -60,6 +62,7 @@ TARGET_SEQ    = $(BUILD_DIR)/golomb_sequential
 TARGET_OPENMP = $(BUILD_DIR)/golomb_openmp
 TARGET_OPENMP_V2 = $(BUILD_DIR)/golomb_openmp_v2
 TARGET_OPENMP_V3 = $(BUILD_DIR)/golomb_openmp_v3
+TARGET_OPENMP_V4 = $(BUILD_DIR)/golomb_openmp_v4
 TARGET_MPI    = $(BUILD_DIR)/golomb_mpi
 TARGET_COMPARE = $(BUILD_DIR)/golomb_compare
 
@@ -111,6 +114,15 @@ $(TARGET_OPENMP_V3): $(OBJS_OPENMP_V3)
 	$(CXX) $(LDFLAGS) -o $@ $^
 
 $(BUILD_DIR)/v3_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# OpenMP V4 target (prefix-based)
+openmp_v4: $(BUILD_DIR) $(TARGET_OPENMP_V4)
+
+$(TARGET_OPENMP_V4): $(OBJS_OPENMP_V4)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/v4_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 # MPI target
@@ -204,7 +216,7 @@ run-seq: $(TARGET_SEQ)
 run-seq-dev: $(TARGET_SEQ_DEV)
 	./$(TARGET_SEQ_DEV)
 
-.PHONY: all sequential sequential-dev openmp openmp_v2 openmp_v3 mpi openmp-dev mpi-dev clean \
+.PHONY: all sequential sequential-dev openmp openmp_v2 openmp_v3 openmp_v4 mpi openmp-dev mpi-dev clean \
         run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2 \
         test bench run-seq run-seq-dev compare run-compare
 
