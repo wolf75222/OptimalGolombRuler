@@ -5,15 +5,16 @@
 #include <cstring>
 #include <vector>
 #include <omp.h>
-#include <immintrin.h>
 
 // =============================================================================
 // OPTIMIZED GOLOMB RULER SEARCH - OpenMP VERSION 6
 // =============================================================================
-// Key optimizations over V5:
-// - __m128i SIMD operations for 128-bit bitset
-// - Branchless shift using conditional moves
-// - Single-instruction AND/OR/XOR/TEST operations
+// Key optimizations for AMD EPYC (Zen4):
+// - Branchless 128-bit shift using conditional moves
+// - No SIMD intrinsics overhead (let GCC auto-vectorize with -march=native)
+// - Cache-line aligned structures (64 bytes for Zen4)
+// - Prefetch hints for stack frames
+// - Compiler hints (__builtin_expect, always_inline)
 // =============================================================================
 
 static std::atomic<long long> exploredCountV6{0};
@@ -22,103 +23,134 @@ constexpr int MAX_MARKS_V6 = 24;
 constexpr int MAX_LEN_V6 = 127;
 
 // =============================================================================
-// SIMD 128-BIT BITSET using __m128i
+// BRANCHLESS 128-BIT BITSET - Optimized for AMD Zen4
 // =============================================================================
-struct alignas(16) BitSet128S {
-    __m128i data;
+// Uses 2x uint64_t with branchless operations
+// GCC will auto-vectorize with -march=znver4
+// =============================================================================
+struct alignas(16) BitSet128B {
+    uint64_t lo;  // bits 0-63
+    uint64_t hi;  // bits 64-127
 
-    BitSet128S() : data(_mm_setzero_si128()) {}
-    BitSet128S(__m128i d) : data(d) {}
-    BitSet128S(uint64_t lo, uint64_t hi) : data(_mm_set_epi64x(static_cast<long long>(hi), static_cast<long long>(lo))) {}
+    // Constructors
+    __attribute__((always_inline))
+    BitSet128B() : lo(0), hi(0) {}
 
-    // Get lo/hi parts
-    inline uint64_t lo() const { return static_cast<uint64_t>(_mm_cvtsi128_si64(data)); }
-    inline uint64_t hi() const { return static_cast<uint64_t>(_mm_extract_epi64(data, 1)); }
+    __attribute__((always_inline))
+    BitSet128B(uint64_t l, uint64_t h) : lo(l), hi(h) {}
 
-    // Set bit at position
-    inline void set(int pos) {
-        if (pos < 64) {
-            uint64_t l = lo() | (1ULL << pos);
-            data = _mm_set_epi64x(static_cast<long long>(hi()), static_cast<long long>(l));
-        } else {
-            uint64_t h = hi() | (1ULL << (pos - 64));
-            data = _mm_set_epi64x(static_cast<long long>(h), static_cast<long long>(lo()));
-        }
+    // Set bit at position - branchless version
+    __attribute__((always_inline))
+    void set(int pos) {
+        // Branchless: use arithmetic to select lo or hi
+        const uint64_t mask = 1ULL << (pos & 63);
+        const uint64_t is_hi = static_cast<uint64_t>(pos >= 64);
+        const uint64_t is_lo = 1ULL - is_hi;
+        lo |= mask * is_lo;
+        hi |= mask * is_hi;
     }
 
-    // Test bit at position
-    inline bool test(int pos) const {
-        if (pos < 64) {
-            return (lo() >> pos) & 1;
-        } else {
-            return (hi() >> (pos - 64)) & 1;
-        }
+    // Test bit at position - branchless version
+    __attribute__((always_inline))
+    bool test(int pos) const {
+        const int shift = pos & 63;
+        const uint64_t is_hi = static_cast<uint64_t>(pos >= 64);
+        // Select lo or hi based on pos
+        const uint64_t val = (lo & ~(-is_hi)) | (hi & (-is_hi));
+        return (val >> shift) & 1;
     }
 
-    // Left shift - optimized branchless version
-    inline BitSet128S operator<<(int n) const {
-        if (n == 0) return *this;
-        if (n >= 128) return BitSet128S();
+    // Left shift - FULLY BRANCHLESS version optimized for AMD
+    __attribute__((always_inline))
+    BitSet128B operator<<(int n) const {
+        // Handle edge cases with masks instead of branches
+        const uint64_t zero_mask = static_cast<uint64_t>(n < 128) - 1ULL;  // All 1s if n >= 128
+        const uint64_t identity_mask = static_cast<uint64_t>(n == 0) - 1ULL;  // All 0s if n == 0
 
-        uint64_t lo_val = lo();
-        uint64_t hi_val = hi();
+        // For n >= 64: lo goes to hi position, lo becomes 0
+        // For n < 64: standard 128-bit shift
+        const int n_mod = n & 63;
+        const int n_inv = 64 - n_mod;
+        const uint64_t ge64 = static_cast<uint64_t>(n >= 64);
 
-        if (n >= 64) {
-            // Shift >= 64: lo goes to hi, lo becomes 0
-            return BitSet128S(0, lo_val << (n - 64));
-        }
+        // Compute both cases
+        // Case n < 64:
+        const uint64_t new_lo_lt64 = lo << n_mod;
+        const uint64_t carry = (n_mod == 0) ? 0 : (lo >> n_inv);
+        const uint64_t new_hi_lt64 = (hi << n_mod) | carry;
 
-        // Shift < 64: standard 128-bit shift
-        uint64_t new_hi = (hi_val << n) | (lo_val >> (64 - n));
-        uint64_t new_lo = lo_val << n;
-        return BitSet128S(new_lo, new_hi);
+        // Case n >= 64:
+        const uint64_t new_lo_ge64 = 0;
+        const uint64_t new_hi_ge64 = lo << n_mod;
+
+        // Select based on n >= 64 (branchless)
+        const uint64_t new_lo_raw = (new_lo_lt64 & ~(-ge64)) | (new_lo_ge64 & (-ge64));
+        const uint64_t new_hi_raw = (new_hi_lt64 & ~(-ge64)) | (new_hi_ge64 & (-ge64));
+
+        // Apply zero mask for n >= 128
+        const uint64_t new_lo = new_lo_raw & ~zero_mask;
+        const uint64_t new_hi = new_hi_raw & ~zero_mask;
+
+        // Apply identity for n == 0
+        const uint64_t final_lo = (new_lo & identity_mask) | (lo & ~identity_mask);
+        const uint64_t final_hi = (new_hi & identity_mask) | (hi & ~identity_mask);
+
+        return BitSet128B(final_lo, final_hi);
     }
 
-    // Bitwise AND - SIMD
-    inline BitSet128S operator&(const BitSet128S& other) const {
-        return BitSet128S(_mm_and_si128(data, other.data));
+    // Bitwise AND
+    __attribute__((always_inline))
+    BitSet128B operator&(const BitSet128B& other) const {
+        return BitSet128B(lo & other.lo, hi & other.hi);
     }
 
-    // Bitwise OR - SIMD
-    inline BitSet128S operator|(const BitSet128S& other) const {
-        return BitSet128S(_mm_or_si128(data, other.data));
+    // Bitwise OR
+    __attribute__((always_inline))
+    BitSet128B operator|(const BitSet128B& other) const {
+        return BitSet128B(lo | other.lo, hi | other.hi);
     }
 
-    // Bitwise XOR - SIMD
-    inline BitSet128S operator^(const BitSet128S& other) const {
-        return BitSet128S(_mm_xor_si128(data, other.data));
+    // Bitwise XOR
+    __attribute__((always_inline))
+    BitSet128B operator^(const BitSet128B& other) const {
+        return BitSet128B(lo ^ other.lo, hi ^ other.hi);
     }
 
-    // Check if any bit is set - SIMD optimized
-    inline bool any() const {
-        return !_mm_testz_si128(data, data);
+    // Check if any bit is set
+    __attribute__((always_inline))
+    bool any() const {
+        return (lo | hi) != 0;
     }
 
     // Reset all bits
-    inline void reset() {
-        data = _mm_setzero_si128();
+    __attribute__((always_inline))
+    void reset() {
+        lo = 0;
+        hi = 0;
     }
 };
 
 // =============================================================================
-// WORK ITEM - A prefix to explore
+// WORK ITEM - A prefix to explore (cache-line aligned for Zen4)
 // =============================================================================
-struct alignas(32) WorkItemV6 {
-    BitSet128S reversed_marks;
-    BitSet128S used_dist;
+struct alignas(64) WorkItemV6 {
+    BitSet128B reversed_marks;
+    BitSet128B used_dist;
     int marks_count;
     int ruler_length;
+    int padding[2];  // Pad to 64 bytes
 };
 
 // =============================================================================
-// STACK FRAME
+// STACK FRAME (cache-line aligned)
 // =============================================================================
-struct alignas(32) StackFrameV6 {
-    BitSet128S reversed_marks;
-    BitSet128S used_dist;
+struct alignas(64) StackFrameV6 {
+    BitSet128B reversed_marks;
+    BitSet128B used_dist;
     int marks_count;
     int ruler_length;
     int next_candidate;
+    int padding[3];  // Pad to 64 bytes
 };
 
 // =============================================================================
@@ -133,7 +165,7 @@ struct alignas(64) ThreadBestV6 {
 // =============================================================================
 // EXTRACT MARKS
 // =============================================================================
-static void extractMarksV6(const BitSet128S& reversed_marks,
+static void extractMarksV6(const BitSet128B& reversed_marks,
                            int ruler_length, int* marks, int& numMarks) {
     numMarks = 0;
     for (int i = 0; i <= ruler_length; ++i) {
@@ -147,8 +179,8 @@ static void extractMarksV6(const BitSet128S& reversed_marks,
 // PREFIX GENERATION
 // =============================================================================
 static void generatePrefixesV6(
-    BitSet128S reversed_marks,
-    BitSet128S used_dist,
+    BitSet128B reversed_marks,
+    BitSet128B used_dist,
     int marks_count,
     int ruler_length,
     int target_depth,
@@ -180,16 +212,16 @@ static void generatePrefixesV6(
     for (int pos = min_pos; pos <= max_pos; ++pos) {
         const int offset = pos - ruler_length;
 
-        BitSet128S new_dist = reversed_marks << offset;
+        BitSet128B new_dist = reversed_marks << offset;
 
         if ((new_dist & used_dist).any()) {
             continue;
         }
 
-        BitSet128S new_reversed = reversed_marks << offset;
+        BitSet128B new_reversed = reversed_marks << offset;
         new_reversed.set(0);
 
-        BitSet128S new_used = used_dist ^ new_dist;
+        BitSet128B new_used = used_dist ^ new_dist;
 
         generatePrefixesV6(new_reversed, new_used, marks_count + 1, pos,
                           target_depth, target_marks, maxLen, prefixes);
@@ -197,7 +229,7 @@ static void generatePrefixesV6(
 }
 
 // =============================================================================
-// CORE ITERATIVE BACKTRACKING - SIMD OPTIMIZED
+// CORE ITERATIVE BACKTRACKING - BRANCHLESS OPTIMIZED
 // =============================================================================
 static void backtrackIterativeV6(
     ThreadBestV6& threadBest,
@@ -213,13 +245,18 @@ static void backtrackIterativeV6(
 
         StackFrameV6& frame = stack[stackTop];
 
+        // Prefetch next stack frame
+        if (__builtin_expect(stackTop + 1 < MAX_MARKS_V6, 1)) {
+            __builtin_prefetch(&stack[stackTop + 1], 1, 3);
+        }
+
         const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
 
         // Pruning: Golomb lower bound
         const int r = n - frame.marks_count;
         const int minAdditionalLength = (r * (r + 1)) / 2;
 
-        if (frame.ruler_length + minAdditionalLength >= currentGlobalBest) [[unlikely]] {
+        if (__builtin_expect(frame.ruler_length + minAdditionalLength >= currentGlobalBest, 0)) {
             stackTop--;
             continue;
         }
@@ -237,17 +274,17 @@ static void backtrackIterativeV6(
 
         for (int pos = startNext; pos <= max_pos; ++pos) {
             const int newGlobalBest = globalBestLen.load(std::memory_order_relaxed);
-            if (pos >= newGlobalBest) [[unlikely]] {
+            if (__builtin_expect(pos >= newGlobalBest, 0)) {
                 break;
             }
 
             const int offset = pos - frame.ruler_length;
 
-            // SIMD shift
-            BitSet128S new_dist = frame.reversed_marks << offset;
+            // Branchless shift
+            BitSet128B new_dist = frame.reversed_marks << offset;
 
-            // SIMD AND + test
-            if ((new_dist & frame.used_dist).any()) [[likely]] {
+            // AND + test
+            if (__builtin_expect((new_dist & frame.used_dist).any(), 1)) {
                 continue;
             }
 
@@ -258,7 +295,7 @@ static void backtrackIterativeV6(
                 if (solutionLen < threadBest.bestLen) {
                     threadBest.bestLen = solutionLen;
 
-                    BitSet128S final_marks = frame.reversed_marks << offset;
+                    BitSet128B final_marks = frame.reversed_marks << offset;
                     final_marks.set(0);
 
                     extractMarksV6(final_marks, pos, threadBest.bestMarks, threadBest.bestNumMarks);
@@ -277,7 +314,6 @@ static void backtrackIterativeV6(
                 newFrame.reversed_marks = frame.reversed_marks << offset;
                 newFrame.reversed_marks.set(0);
 
-                // SIMD XOR
                 newFrame.used_dist = frame.used_dist ^ new_dist;
 
                 newFrame.marks_count = newMarksCount;
@@ -300,6 +336,7 @@ static void backtrackIterativeV6(
 // COMPUTE OPTIMAL PREFIX DEPTH
 // =============================================================================
 static int computePrefixDepthV6(int n, int numThreads) {
+    (void)numThreads;  // Unused for now
     if (n <= 6) return 2;
     if (n <= 8) return 3;
     if (n <= 10) return 3;
@@ -351,8 +388,8 @@ void searchGolombV6(int n, int maxLen, GolombRuler& best, int prefixDepth)
     prefixes.reserve(100000);
 
     {
-        BitSet128S reversed_marks;
-        BitSet128S used_dist;
+        BitSet128B reversed_marks;
+        BitSet128B used_dist;
         reversed_marks.set(0);
 
         generatePrefixesV6(reversed_marks, used_dist, 1, 0,

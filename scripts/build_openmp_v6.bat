@@ -1,5 +1,6 @@
 @echo off
-REM Build script for OpenMP V6 version (SIMD __m128i + prefix-based) - MSVC
+REM Build script for OpenMP V6 version (Branchless + prefix-based) - MSVC
+REM Optimized for both Intel and AMD with branchless 128-bit operations
 REM Usage: build_openmp_v6.bat
 
 setlocal enabledelayedexpansion
@@ -19,8 +20,8 @@ if defined VSDIR (
 REM Create build directory
 if not exist build mkdir build
 
-REM Compile with maximum optimization flags + SIMD + debug symbols
-echo Compiling OpenMP V6 version (SIMD __m128i + prefix-based + iterative)...
+REM Compile with maximum optimization flags + branchless ops + debug symbols
+echo Compiling OpenMP V6 version (Branchless + prefix-based + iterative)...
 cl.exe /std:c++20 /O2 /Oi /Ot /GL /openmp /EHsc /DNDEBUG ^
        /arch:AVX2 ^
        /Zi /Fd:build\golomb_openmp_v6.pdb ^
