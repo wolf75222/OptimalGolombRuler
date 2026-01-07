@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --account=r250127
 #SBATCH --partition=short
-#SBATCH --constraint=arm
+#SBATCH --constraint=armgpu
 #SBATCH --time=0-02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
