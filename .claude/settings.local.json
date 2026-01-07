@@ -35,7 +35,8 @@
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && scripts\\\\build_mpi.bat dev 2>&1\")",
       "Bash(cmd.exe /c \"cd /d c:\\\\Users\\\\romai\\\\dev\\\\OptimalGolombRuler && call scripts\\\\build_mpi.bat dev 2>&1\")",
       "Bash(cmd.exe /c \"where cl.exe 2>&1\")",
-      "Bash(cmd.exe /c:*)"
+      "Bash(cmd.exe /c:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

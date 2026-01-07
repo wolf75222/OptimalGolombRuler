@@ -42,17 +42,26 @@ LDFLAGS       = -fopenmp $(OPTFLAGS) -flto
 # Sources (golomb.cpp removed - all code is header-only or in search files)
 SRCS_SEQ    = $(SRC_DIR)/search_sequential.cpp $(SRC_DIR)/main_sequential.cpp
 SRCS_OPENMP = $(SRC_DIR)/search.cpp $(SRC_DIR)/main_openmp.cpp
+SRCS_OPENMP_V2 = $(SRC_DIR)/search_v2.cpp $(SRC_DIR)/main_openmp_v2.cpp
+SRCS_OPENMP_V3 = $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_openmp_v3.cpp
 SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
+SRCS_COMPARE = $(SRC_DIR)/search.cpp $(SRC_DIR)/search_v2.cpp $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_benchmark_compare.cpp
 
 # Objects
 OBJS_SEQ    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq_%.o,$(SRCS_SEQ))
 OBJS_OPENMP = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS_OPENMP))
+OBJS_OPENMP_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v2_%.o,$(SRCS_OPENMP_V2))
+OBJS_OPENMP_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v3_%.o,$(SRCS_OPENMP_V3))
 OBJS_MPI    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi_%.o,$(SRCS_MPI))
+OBJS_COMPARE = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/cmp_%.o,$(SRCS_COMPARE))
 
 # Targets
 TARGET_SEQ    = $(BUILD_DIR)/golomb_sequential
 TARGET_OPENMP = $(BUILD_DIR)/golomb_openmp
+TARGET_OPENMP_V2 = $(BUILD_DIR)/golomb_openmp_v2
+TARGET_OPENMP_V3 = $(BUILD_DIR)/golomb_openmp_v3
 TARGET_MPI    = $(BUILD_DIR)/golomb_mpi
+TARGET_COMPARE = $(BUILD_DIR)/golomb_compare
 
 # Default target
 all: sequential openmp
@@ -77,13 +86,31 @@ $(TARGET_SEQ): $(OBJS_SEQ)
 $(BUILD_DIR)/seq_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS_SEQ) -c -o $@ $<
 
-# OpenMP target
+# OpenMP target (V1 - original)
 openmp: $(BUILD_DIR) $(TARGET_OPENMP)
 
 $(TARGET_OPENMP): $(OBJS_OPENMP)
 	$(CXX) $(LDFLAGS) -o $@ $^
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# OpenMP V2 target (bitset shift)
+openmp_v2: $(BUILD_DIR) $(TARGET_OPENMP_V2)
+
+$(TARGET_OPENMP_V2): $(OBJS_OPENMP_V2)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/v2_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# OpenMP V3 target (hybrid)
+openmp_v3: $(BUILD_DIR) $(TARGET_OPENMP_V3)
+
+$(TARGET_OPENMP_V3): $(OBJS_OPENMP_V3)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/v3_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 # MPI target
@@ -94,6 +121,15 @@ $(TARGET_MPI): $(OBJS_MPI)
 
 $(BUILD_DIR)/mpi_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(MPICXX) $(CXXFLAGS) -c -o $@ $<
+
+# Compare V1 vs V2 benchmark target
+compare: $(BUILD_DIR) $(TARGET_COMPARE)
+
+$(TARGET_COMPARE): $(OBJS_COMPARE)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/cmp_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 # Clean
 clean:
@@ -168,6 +204,9 @@ run-seq: $(TARGET_SEQ)
 run-seq-dev: $(TARGET_SEQ_DEV)
 	./$(TARGET_SEQ_DEV)
 
-.PHONY: all sequential sequential-dev openmp mpi openmp-dev mpi-dev clean \
+.PHONY: all sequential sequential-dev openmp openmp_v2 openmp_v3 mpi openmp-dev mpi-dev clean \
         run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2 \
-        test bench run-seq run-seq-dev
+        test bench run-seq run-seq-dev compare run-compare
+
+run-compare: $(TARGET_COMPARE)
+	./$(TARGET_COMPARE)
