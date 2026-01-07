@@ -1,0 +1,466 @@
+# callgrind format
+event: t : Microseconds Spent Total
+event: ps : Microseconds Spent Per Second
+events: t ps
+cmd: ?
+desc: Wed Jan 07 20:22:38 2026
+
+ob=(1) 
+fl=(1) 
+fn=(1) [0000000000000001]
+cob=(1)
+cfl=(1)
+cfn=(1)
+calls=179 0
+0 14932250 1892314
+cob=(2) golomb_openmp_v5
+cfl=(1)
+cfn=(2) [00007FFF06969CCA]
+calls=89 0
+0 7465122 946030
+cob=(2)
+cfl=(2) [unknown]
+cfn=(3) std::cout
+calls=89 0
+0 7465122 946030
+cob=(2)
+cfl=(1)
+cfn=(4) [00007FFF06968B13]
+calls=1 0
+0 2005 254
+
+ob=(1)
+fl=(1)
+fn=(5) [0000000000000014]
+cob=(2)
+cfl=(1)
+cfn=(6) [00007FFF069617C2]
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(7) [0000000000000030]
+cob=(1)
+cfl=(1)
+cfn=(1)
+calls=90 0
+0 7467127 946284
+
+ob=(1)
+fl=(1)
+fn=(8) [000000314C3DF084]
+cob=(2)
+cfl=(1)
+cfn=(9) [00007FFF06963582]
+calls=1 0
+0 1999 253
+
+ob=(1)
+fl=(1)
+fn=(10) [000000314C3DF870]
+cob=(2)
+cfl=(1)
+cfn=(11) [00007FFF06961801]
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(12) [000000314C3DF890]
+cob=(1)
+cfl=(1)
+cfn=(13) [000000314C3DFB08]
+calls=89 0
+0 7465122 946030
+cob=(1)
+cfl=(1)
+cfn=(12)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(14) [000000314C3DF910]
+cob=(1)
+cfl=(1)
+cfn=(5)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(15) [000000314C3DFA30]
+cob=(1)
+cfl=(1)
+cfn=(16) [000000314C3DFA34]
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(16)
+cob=(1)
+cfl=(1)
+cfn=(7)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(17) [000000314C3DFB00]
+cob=(1)
+cfl=(1)
+cfn=(15)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(13)
+cob=(1)
+cfl=(1)
+cfn=(17)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(18) [000001CF00000000]
+cob=(1)
+cfl=(1)
+cfn=(19) [000001CFCE2D2DA0]
+calls=1 0
+0 2005 254
+
+ob=(1)
+fl=(1)
+fn=(20) [000001CFCE2C8580]
+cob=(1)
+cfl=(1)
+cfn=(18)
+calls=1 0
+0 2005 254
+
+ob=(1)
+fl=(1)
+fn=(21) [000001CFCE2D2C90]
+cob=(1)
+cfl=(1)
+cfn=(14)
+calls=89 0
+0 7465122 946030
+
+ob=(1)
+fl=(1)
+fn=(19)
+cob=(2)
+cfl=(1)
+cfn=(22) [00007FFF06961A47]
+calls=1 0
+0 2005 254
+
+ob=(1)
+fl=(1)
+fn=(23) [000001CFCE2DD7E0]
+cob=(1)
+cfl=(1)
+cfn=(8)
+calls=1 0
+0 1999 253
+
+ob=(2)
+fl=(3) C:/Users/romai/dev/golomb/OptimalGolombRuler/src/search_v5.cpp
+fn=(24) BitSet128::operator<<
+63 234672 29739
+64 34028 4312
+65 225576 28586
+66 300444 38074
+70 1097657 139102
+71 660139 83657
+73 368508 46700
+
+ob=(2)
+fl=(3)
+fn=(25) backtrackIterativeV5
+212 460603 58371
+213 13515 1713
+220 218166 27647
+223 148703 18845
+234 10012 1269
+239 117781 14926
+241 320748 40647
+243 245489 31110
+244 49001 6210
+248 25988 3293
+251 297558 37708
+254 1125737 142661
+259 479091 60714
+261 44543 5645
+281 41976 5319
+285 369030 46766
+286 50508 6401
+288 348502 44164
+295 177148 22449
+cob=(2)
+cfl=(3)
+cfn=(24)
+calls=17 63
+254 2921024 370172
+
+ob=(2)
+fl=(4) C:/Program Files (x86)/Windows Kits/10/include/10.0.26100.0/ucrt/stdio.h
+fn=(26) sprintf_s
+cob=(2)
+cfl=(5) minkernel/crts/ucrt/src/appcrt/stdio/output.cpp
+cfn=(27) __stdio_common_vsprintf_s
+calls=1 302
+1827 2003 254
+
+ob=(2)
+fl=(6) C:/Users/romai/dev/golomb/OptimalGolombRuler/src/main_openmp_v5.cpp
+fn=(28) main
+cob=(2)
+cfl=(7) C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/include/__msvc_ostream.hpp
+cfn=(29) std::operator<<<std::char_traits<char> >
+calls=1 791
+34 2503 317
+cob=(2)
+cfl=(7)
+cfn=(30) std::basic_ostream<char,std::char_traits<char> >::operator<<
+calls=1 293
+51 2003 254
+cob=(2)
+cfl=(7)
+cfn=(30)
+calls=1 293
+63 2003 254
+
+ob=(2)
+fl=(7)
+fn=(29)
+cob=(2)
+cfl=(8) D:/a/_work/1/s/src/vctools/crt/github/stl/inc/__msvc_filebuf.hpp
+cfn=(31) std::basic_filebuf<char,std::char_traits<char> >::xsputn
+calls=1 604
+791 2503 317
+
+ob=(2)
+fl=(7)
+fn=(30)
+cob=(2)
+cfl=(9) C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/include/xlocnum
+cfn=(32) std::num_put<char,std::ostreambuf_iterator<char,std::char_traits<char> > >::do_put
+calls=2 1320
+293 4005 508
+
+ob=(2)
+fl=(9)
+fn=(32)
+cob=(2)
+cfl=(9)
+cfn=(33) std::num_put<char,std::ostreambuf_iterator<char,std::char_traits<char> > >::_Iput
+calls=1 1617
+1320 2003 254
+cob=(2)
+cfl=(4)
+cfn=(26)
+calls=1 1827
+1320 2003 254
+
+ob=(2)
+fl=(9)
+fn=(33)
+cob=(2)
+cfl=(8)
+cfn=(34) std::basic_filebuf<char,std::char_traits<char> >::overflow
+calls=1 443
+1617 2003 254
+
+ob=(2)
+fl=(8)
+fn=(34)
+cob=(2)
+cfl=(10) minkernel/crts/ucrt/src/appcrt/stdio/fputc.cpp
+cfn=(35) fputc
+calls=1 72
+443 2003 254
+
+ob=(2)
+fl=(8)
+fn=(31)
+cob=(2)
+cfl=(11) minkernel/crts/ucrt/src/appcrt/stdio/fwrite.cpp
+cfn=(36) fwrite
+calls=1 53
+604 2503 317
+
+ob=(2)
+fl=(12) D:/a/_work/1/s/src/vctools/crt/vcstartup/src/gs/amd64/amdsecgs.asm
+fn=(37) __security_check_cookie
+45 2003 254
+
+ob=(2)
+fl=(13) D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl
+fn=(38) __scrt_common_main_seh
+cob=(2)
+cfl=(6)
+cfn=(28)
+calls=3 34
+288 6509 825
+
+ob=(2)
+fl=(5)
+fn=(39) common_vsprintf<__crt_stdio_output::format_validation_base,char>
+cob=(2)
+cfl=(14) minkernel/crts/ucrt/inc/corecrt_internal_stdio_output.h
+cfn=(40) __crt_stdio_output::output_processor<char,__crt_stdio_output::string_output_adapter<char>,__crt_stdio_output::format_validation_base<char,__crt_stdio_output::string_output_adapter<char> > >::process
+calls=1 1704
+170 2003 254
+
+ob=(2)
+fl=(14)
+fn=(40)
+cob=(2)
+cfl=(14)
+cfn=(41) __crt_stdio_output::output_processor<char,__crt_stdio_output::string_output_adapter<char>,__crt_stdio_output::format_validation_base<char,__crt_stdio_output::string_output_adapter<char> > >::state_case_type
+calls=1 2169
+1704 2003 254
+
+ob=(2)
+fl=(14)
+fn=(41)
+cob=(2)
+cfl=(12)
+cfn=(37)
+calls=1 45
+2169 2003 254
+
+ob=(2)
+fl=(5)
+fn=(27)
+cob=(2)
+cfl=(5)
+cfn=(39)
+calls=1 170
+302 2003 254
+
+ob=(2)
+fl=(10)
+fn=(35)
+72 2003 254
+
+ob=(2)
+fl=(11)
+fn=(36)
+53 2503 317
+
+ob=(2)
+fl=(3)
+fn=(42) searchGolombV5$omp$1
+cob=(2)
+cfl=(3)
+cfn=(25)
+calls=89 213
+390 7465122 946030
+
+ob=(2)
+fl=(2)
+fn=(3)
+cob=(1)
+cfl=(1)
+cfn=(10)
+calls=89 0
+0 7465122 946030
+cob=(2)
+cfl=(2)
+cfn=(3)
+calls=89 0
+0 7465122 946030
+
+ob=(2)
+fl=(1)
+fn=(6)
+cob=(1)
+cfl=(1)
+cfn=(1)
+calls=89 0
+0 7465122 946030
+
+ob=(2)
+fl=(1)
+fn=(11)
+cob=(1)
+cfl=(1)
+cfn=(12)
+calls=89 0
+0 7465122 946030
+
+ob=(2)
+fl=(1)
+fn=(22)
+cob=(1)
+cfl=(1)
+cfn=(7)
+calls=1 0
+0 2005 254
+
+ob=(2)
+fl=(1)
+fn=(43) [00007FFF0696218A]
+cob=(3) KERNEL32
+cfl=(2)
+cfn=(44) FlsGetValue
+calls=1 0
+0 2004 254
+
+ob=(2)
+fl=(1)
+fn=(45) [00007FFF069621B1]
+cob=(1)
+cfl=(1)
+cfn=(23)
+calls=1 0
+0 1999 253
+
+ob=(2)
+fl=(1)
+fn=(9)
+0 1999 253
+
+ob=(2)
+fl=(1)
+fn=(4)
+cob=(4) KERNELBASE
+cfl=(2)
+cfn=(46) CreateRemoteThreadEx
+calls=1 0
+0 2005 254
+
+ob=(2)
+fl=(1)
+fn=(47) [00007FFF06968DCC]
+cob=(1)
+cfl=(1)
+cfn=(21)
+calls=89 0
+0 7465122 946030
+
+ob=(2)
+fl=(1)
+fn=(2)
+cob=(2)
+cfl=(3)
+cfn=(42)
+calls=89 390
+0 7465122 946030
+
+ob=(4)
+fl=(2)
+fn=(46)
+0 2005 254
+
+ob=(3)
+fl=(2)
+fn=(44)
+0 2004 254

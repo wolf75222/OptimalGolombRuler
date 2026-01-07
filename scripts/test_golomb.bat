@@ -10,6 +10,7 @@ REM   test_golomb.bat v2 11         - Run OpenMP V2 (bitset shift) for n=11
 REM   test_golomb.bat v3 11         - Run OpenMP V3 (hybrid) for n=11
 REM   test_golomb.bat v4 11         - Run OpenMP V4 (prefix-based) for n=11
 REM   test_golomb.bat v5 11         - Run OpenMP V5 (uint64_t ops) for n=11
+REM   test_golomb.bat v6 11         - Run OpenMP V6 (SIMD __m128i) for n=11
 REM   test_golomb.bat mpi 12        - Run MPI+OpenMP for n=12 (2 processes)
 REM   test_golomb.bat mpi 12 4      - Run MPI+OpenMP for n=12 (4 processes)
 REM =============================================================================
@@ -28,6 +29,7 @@ if "%1"=="" (
     echo   v3   - OpenMP V3 ^(hybrid: iterative + bitset shift^)
     echo   v4   - OpenMP V4 ^(prefix-based + iterative + bitset shift^)
     echo   v5   - OpenMP V5 ^(uint64_t ops + prefix-based^)
+    echo   v6   - OpenMP V6 ^(SIMD __m128i + prefix-based^)
     echo   mpi  - MPI+OpenMP
     echo.
     echo Examples:
@@ -37,6 +39,7 @@ if "%1"=="" (
     echo   test_golomb.bat v3 11
     echo   test_golomb.bat v4 12
     echo   test_golomb.bat v5 13
+    echo   test_golomb.bat v6 13
     echo   test_golomb.bat mpi 12 4
     exit /b 1
 )
@@ -74,10 +77,11 @@ if /i "%VERSION%"=="v2" goto :run_v2
 if /i "%VERSION%"=="v3" goto :run_v3
 if /i "%VERSION%"=="v4" goto :run_v4
 if /i "%VERSION%"=="v5" goto :run_v5
+if /i "%VERSION%"=="v6" goto :run_v6
 if /i "%VERSION%"=="mpi" goto :run_mpi
 
 echo ERROR: Unknown version "%VERSION%"
-echo Valid versions: seq, omp, v1, v2, v3, v4, v5, mpi
+echo Valid versions: seq, omp, v1, v2, v3, v4, v5, v6, mpi
 exit /b 1
 
 :run_seq
@@ -192,6 +196,25 @@ if not exist "%PROJECT_DIR%\build\golomb_openmp_v5.exe" (
 echo Running...
 echo.
 powershell -Command "& { $sw = [Diagnostics.Stopwatch]::StartNew(); & '%PROJECT_DIR%\build\golomb_openmp_v5.exe' %N%; $sw.Stop(); Write-Host ''; Write-Host ('Total time: ' + $sw.Elapsed.TotalSeconds.ToString('F3') + ' seconds') -ForegroundColor Green }"
+goto :end
+
+:run_v6
+echo.
+echo ============================================
+echo  OPENMP V6 (SIMD __m128i) - Golomb n=%N%
+echo ============================================
+echo.
+
+REM Build if needed
+if not exist "%PROJECT_DIR%\build\golomb_openmp_v6.exe" (
+    echo Building OpenMP V6 version...
+    call "%PROJECT_DIR%\scripts\build_openmp_v6.bat"
+    if errorlevel 1 exit /b 1
+)
+
+echo Running...
+echo.
+powershell -Command "& { $sw = [Diagnostics.Stopwatch]::StartNew(); & '%PROJECT_DIR%\build\golomb_openmp_v6.exe' %N%; $sw.Stop(); Write-Host ''; Write-Host ('Total time: ' + $sw.Elapsed.TotalSeconds.ToString('F3') + ' seconds') -ForegroundColor Green }"
 goto :end
 
 :run_mpi
