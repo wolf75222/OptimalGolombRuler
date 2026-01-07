@@ -4,8 +4,8 @@
 #SBATCH --constraint=x64cpu
 #SBATCH --time=0-02:00:00
 #SBATCH --nodes=4
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=96
+#SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=24
 #SBATCH --mem=0
 #SBATCH --exclusive
 #SBATCH --job-name=golomb_mpi_v1v2v3
@@ -100,8 +100,8 @@ echo "All MPI binaries built successfully!"
 # =============================================================================
 # MPI processes must be power of 2 for V1/V2 (hypercube)
 # V3 works with any number
-MPI_PROCS=(1 2 4)
-THREADS_PER_PROC=(8 16 32 64 96 192)
+MPI_PROCS=(1 2 4 8 16 32)
+THREADS_PER_PROC=(1 2 4 8 12 24)
 GOLOMB_N=(12 13 14)
 
 export OMP_PLACES=cores
