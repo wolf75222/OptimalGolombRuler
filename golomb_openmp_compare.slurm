@@ -8,25 +8,23 @@
 #SBATCH --cpus-per-task=192
 #SBATCH --mem=0
 #SBATCH --exclusive
-#SBATCH --job-name=golomb_v1v2v3v4v5v6
+#SBATCH --job-name=golomb_v1v2v3v4v5
 #SBATCH --output=job.%J.out
 #SBATCH --error=job.%J.err
 
 # =============================================================================
-# Golomb Ruler OpenMP Comparison: V1 vs V2 vs V3 vs V4 vs V5 vs V6
+# Golomb Ruler OpenMP Comparison: V1 vs V2 vs V3 vs V4 vs V5
 # =============================================================================
-# Compare les 6 versions OpenMP :
+# Compare les 5 versions OpenMP :
 #   V1: Original (iterative + loop unrolling)
 #   V2: Bitset shift (recursive)
 #   V3: Hybrid (iterative + bitset shift)
 #   V4: Prefix-based + iterative + bitset shift
-#   V5: uint64_t ops + prefix-based
-#   V6: SIMD __m128i + prefix-based (fastest) - x86 ONLY
+#   V5: uint64_t ops + prefix-based (fastest)
 #
 # Architecture cible: romeo-c (AMD EPYC, 2 sockets × 96 cores)
 #   - constraint=x64cpu force les noeuds romeo-c
 #   - 192 CPUs disponibles (2:96:1)
-#   - V6 utilise SSE2/AVX2 -> x86 obligatoire
 #
 # Optimizations:
 #   - --exclusive: noeud dedié, pas de mixed
@@ -45,7 +43,7 @@ set -euo pipefail
 romeo_load_x64cpu_env
 
 echo "=========================================="
-echo "Golomb Ruler OpenMP Comparison: V1-V6"
+echo "Golomb Ruler OpenMP Comparison: V1-V5"
 echo "=========================================="
 echo "PWD at start: $(pwd)"
 echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR}"
@@ -72,9 +70,6 @@ echo "Building in: $(pwd)"
 # =============================================================================
 # BUILD ALL VERSIONS
 # =============================================================================
-# Flags optimisés pour AMD EPYC Genoa (romeo-c)
-# -march=znver4 pour AMD Zen4 (Genoa) ou -march=native
-# =============================================================================
 echo ""
 echo "=========================================="
 echo "Building all OpenMP versions"
@@ -82,12 +77,11 @@ echo "=========================================="
 
 make clean 2>/dev/null || true
 
-# Détection arch pour flags optimaux
 ARCH_FLAGS="-march=native -mtune=native"
 echo "Using ARCH_FLAGS: $ARCH_FLAGS"
 
 # Build all versions avec flags natifs
-for ver in openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5 openmp_v6; do
+for ver in openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5; do
     echo "Building $ver..."
     make $ver CXX=g++ OPTFLAGS="-O3 $ARCH_FLAGS -funroll-loops -fomit-frame-pointer -flto"
 done
@@ -97,7 +91,7 @@ echo "Contents of build/:"
 ls -lah build || true
 
 # Verifier les binaires
-for bin in golomb_openmp golomb_openmp_v2 golomb_openmp_v3 golomb_openmp_v4 golomb_openmp_v5 golomb_openmp_v6; do
+for bin in golomb_openmp golomb_openmp_v2 golomb_openmp_v3 golomb_openmp_v4 golomb_openmp_v5; do
     if [[ ! -x ./build/$bin ]]; then
         echo "ERROR: ./build/$bin not found or not executable" >&2
         exit 1
@@ -109,9 +103,6 @@ echo "All binaries built successfully!"
 # =============================================================================
 # BENCHMARK CONFIGURATION
 # =============================================================================
-# romeo-c: 2 sockets × 96 cores = 192 CPUs
-# Test avec différents nombres de threads pour voir le scaling
-# =============================================================================
 THREADS=(8 16 32 64 96 192)
 GOLOMB_N=(12 13)
 BINDINGS=(close spread)
@@ -120,7 +111,7 @@ export OMP_PLACES=cores
 export OMP_STACKSIZE=16M
 
 # Output CSV file
-CSV_FILE="results_v1v2v3v4v5v6_comparison.csv"
+CSV_FILE="results_v1v2v3v4v5_comparison.csv"
 echo "threads,n,version,binding,time_s,length,states,states_per_sec" > "$CSV_FILE"
 
 # =============================================================================
@@ -129,7 +120,6 @@ echo "threads,n,version,binding,time_s,length,states,states_per_sec" > "$CSV_FIL
 parse_output() {
     local output="$1"
     local field="$2"
-    # Use # as sed delimiter to avoid issues with / in field names like "States/sec"
     echo "$output" | grep -E "^${field}\s*:" | sed -E "s#^${field}\s*:\s*##" | awk '{print $1}'
 }
 
@@ -139,9 +129,6 @@ run_bench() {
     local n="$2"
     local threads="$3"
 
-    # srun gère le binding CPU via Slurm
-    # --cpu-bind=cores : bind aux cores physiques
-    # --distribution=block:block : distribution NUMA-aware
     OMP_NUM_THREADS=$threads srun \
         --cpu-bind=cores \
         --distribution=block:block \
@@ -166,15 +153,14 @@ for bind in "${BINDINGS[@]}"; do
     for t in "${THREADS[@]}"; do
         for n in "${GOLOMB_N[@]}"; do
 
-            # Run all 6 versions
-            for ver in V1 V2 V3 V4 V5 V6; do
+            # Run all 5 versions
+            for ver in V1 V2 V3 V4 V5; do
                 case $ver in
                     V1) binary="./build/golomb_openmp" ;;
                     V2) binary="./build/golomb_openmp_v2" ;;
                     V3) binary="./build/golomb_openmp_v3" ;;
                     V4) binary="./build/golomb_openmp_v4" ;;
                     V5) binary="./build/golomb_openmp_v5" ;;
-                    V6) binary="./build/golomb_openmp_v6" ;;
                 esac
 
                 output=$(run_bench "$binary" "$n" "$t")
@@ -193,17 +179,17 @@ for bind in "${BINDINGS[@]}"; do
 done
 
 # =============================================================================
-# SUMMARY - Best V6 times per configuration
+# SUMMARY - Best V5 times per configuration
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "SUMMARY - Best V6 times (close binding)"
+echo "SUMMARY - V5 vs others (close binding)"
 echo "=========================================="
 echo ""
 
-printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
-    "Threads" "n" "V1(s)" "V2(s)" "V3(s)" "V4(s)" "V5(s)" "V6(s)" "V6/V1" "V6/V5"
-echo "--------------------------------------------------------------------------------------------------------------"
+printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
+    "Threads" "n" "V1(s)" "V2(s)" "V3(s)" "V4(s)" "V5(s)" "V5/V1"
+echo "--------------------------------------------------------------------------"
 
 for t in "${THREADS[@]}"; do
     for n in "${GOLOMB_N[@]}"; do
@@ -212,13 +198,11 @@ for t in "${THREADS[@]}"; do
         v3_time=$(grep "^$t,$n,V3,close," "$CSV_FILE" | cut -d',' -f5)
         v4_time=$(grep "^$t,$n,V4,close," "$CSV_FILE" | cut -d',' -f5)
         v5_time=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
-        v6_time=$(grep "^$t,$n,V6,close," "$CSV_FILE" | cut -d',' -f5)
 
-        if [[ -n "$v1_time" && -n "$v6_time" && "$v6_time" != "0" ]]; then
-            speedup_v1=$(echo "scale=2; $v1_time / $v6_time" | bc 2>/dev/null || echo "N/A")
-            speedup_v5=$(echo "scale=2; $v5_time / $v6_time" | bc 2>/dev/null || echo "N/A")
-            printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
-                "$t" "$n" "$v1_time" "$v2_time" "$v3_time" "$v4_time" "$v5_time" "$v6_time" "${speedup_v1}x" "${speedup_v5}x"
+        if [[ -n "$v1_time" && -n "$v5_time" && "$v5_time" != "0" ]]; then
+            speedup_v1=$(echo "scale=2; $v1_time / $v5_time" | bc 2>/dev/null || echo "N/A")
+            printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
+                "$t" "$n" "$v1_time" "$v2_time" "$v3_time" "$v4_time" "$v5_time" "${speedup_v1}x"
         fi
     done
 done
@@ -228,27 +212,27 @@ done
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "BINDING COMPARISON - V6 close vs spread"
+echo "BINDING COMPARISON - V5 close vs spread"
 echo "=========================================="
 echo ""
 
-printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "Threads" "n" "V6-close(s)" "V6-spread(s)" "Winner" "Diff%"
+printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "Threads" "n" "V5-close(s)" "V5-spread(s)" "Winner" "Diff%"
 echo "----------------------------------------------------------------------"
 
 for t in "${THREADS[@]}"; do
     for n in "${GOLOMB_N[@]}"; do
-        v6_close=$(grep "^$t,$n,V6,close," "$CSV_FILE" | cut -d',' -f5)
-        v6_spread=$(grep "^$t,$n,V6,spread," "$CSV_FILE" | cut -d',' -f5)
+        v5_close=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
+        v5_spread=$(grep "^$t,$n,V5,spread," "$CSV_FILE" | cut -d',' -f5)
 
-        if [[ -n "$v6_close" && -n "$v6_spread" && "$v6_close" != "0" && "$v6_spread" != "0" ]]; then
-            if (( $(echo "$v6_close < $v6_spread" | bc -l) )); then
+        if [[ -n "$v5_close" && -n "$v5_spread" && "$v5_close" != "0" && "$v5_spread" != "0" ]]; then
+            if (( $(echo "$v5_close < $v5_spread" | bc -l) )); then
                 winner="close"
-                diff=$(echo "scale=1; 100 * ($v6_spread - $v6_close) / $v6_spread" | bc 2>/dev/null || echo "N/A")
+                diff=$(echo "scale=1; 100 * ($v5_spread - $v5_close) / $v5_spread" | bc 2>/dev/null || echo "N/A")
             else
                 winner="spread"
-                diff=$(echo "scale=1; 100 * ($v6_close - $v6_spread) / $v6_close" | bc 2>/dev/null || echo "N/A")
+                diff=$(echo "scale=1; 100 * ($v5_close - $v5_spread) / $v5_close" | bc 2>/dev/null || echo "N/A")
             fi
-            printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "$t" "$n" "$v6_close" "$v6_spread" "$winner" "${diff}%"
+            printf "%-8s %-4s %-12s %-12s %-10s %-10s\n" "$t" "$n" "$v5_close" "$v5_spread" "$winner" "${diff}%"
         fi
     done
 done
@@ -258,7 +242,7 @@ done
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "NUMA SCALING - V6 (close binding)"
+echo "NUMA SCALING - V5 (close binding)"
 echo "=========================================="
 echo "Note: romeo-c has 2 NUMA domains (96 cores each)"
 echo ""
@@ -268,18 +252,17 @@ echo "--------------------------------------------------------------"
 
 for n in "${GOLOMB_N[@]}"; do
     # Get baseline (8 threads)
-    base_time=$(grep "^8,$n,V6,close," "$CSV_FILE" | cut -d',' -f5)
+    base_time=$(grep "^8,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
 
     for t in "${THREADS[@]}"; do
-        v6_time=$(grep "^$t,$n,V6,close," "$CSV_FILE" | cut -d',' -f5)
-        v6_sps=$(grep "^$t,$n,V6,close," "$CSV_FILE" | cut -d',' -f8)
+        v5_time=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
+        v5_sps=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f8)
 
-        if [[ -n "$v6_time" && -n "$base_time" && "$v6_time" != "0" ]]; then
-            # Calcul efficacité parallèle: (T1/Tn) / n
+        if [[ -n "$v5_time" && -n "$base_time" && "$v5_time" != "0" ]]; then
             ideal_speedup=$(echo "scale=2; $t / 8" | bc)
-            actual_speedup=$(echo "scale=2; $base_time / $v6_time" | bc 2>/dev/null || echo "1")
+            actual_speedup=$(echo "scale=2; $base_time / $v5_time" | bc 2>/dev/null || echo "1")
             efficiency=$(echo "scale=1; 100 * $actual_speedup / $ideal_speedup" | bc 2>/dev/null || echo "N/A")
-            printf "%-8s %-4s %-12s %-12s %-12s\n" "$t" "$n" "$v6_time" "$v6_sps" "${efficiency}%"
+            printf "%-8s %-4s %-12s %-12s %-12s\n" "$t" "$n" "$v5_time" "$v5_sps" "${efficiency}%"
         fi
     done
     echo ""
