@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --account=r250127
 #SBATCH --partition=short
-#SBATCH --constraint=armgpu
+#SBATCH --constraint=x64cpu
 #SBATCH --time=0-00:30:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=8
@@ -13,22 +13,18 @@
 #SBATCH --error=job_v3v4.%J.err
 
 # =============================================================================
-# Golomb Ruler MPI V3 vs V4 Quick Comparison - ARM
-# =============================================================================
-# Compare V3 (static prefixes) vs V4 (greedy init + dynamic distribution)
-# Single node ARM for fast scheduling
+# Golomb Ruler MPI V3 vs V4 Quick Comparison
 # =============================================================================
 
 set -euo pipefail
 
-romeo_load_armgpu_env
-spack load /i6r3tsl  # openmpi@4.1.7 for ARM
+romeo_load_x64cpu_env
+spack load openmpi@4.1.7 %aocc
 
 echo "=========================================="
-echo "Golomb Ruler MPI V3 vs V4 (ARM)"
+echo "Golomb Ruler MPI V3 vs V4"
 echo "=========================================="
 echo "Node: ${SLURM_NODELIST}"
-echo "CPUs: ${SLURM_CPUS_ON_NODE}"
 echo "Date: $(date)"
 echo ""
 
@@ -49,7 +45,6 @@ done
 echo "Build OK!"
 echo ""
 
-# Config: 8 MPI x 12 threads = 96 cores (best from benchmarks)
 export OMP_NUM_THREADS=12
 export OMP_PLACES=cores
 export OMP_PROC_BIND=close
@@ -58,7 +53,20 @@ CSV_FILE="results_v3_v4.csv"
 echo "n,version,time_s,length,states" > "$CSV_FILE"
 
 parse_output() {
-    echo "$1" | grep -E "^${2}\s*:" | sed -E "s#^${2}\s*:\s*##" | awk '{print $1}'
+    local output="$1"
+    local field="$2"
+    echo "$output" | grep -E "^${field}\s*:" | sed -E "s#^${field}\s*:\s*##" | awk '{print $1}'
+}
+
+run_bench() {
+    local binary="$1"
+    local n="$2"
+    OMP_NUM_THREADS=12 srun \
+        --ntasks=8 \
+        --cpus-per-task=$SLURM_CPUS_PER_TASK \
+        --cpu-bind=cores \
+        --distribution=block:block \
+        "$binary" "$n" 2>&1
 }
 
 echo "=========================================="
@@ -69,12 +77,8 @@ printf "%-4s %-8s %-12s %-8s %-10s\n" "n" "Version" "Time(s)" "Length" "Speedup"
 echo "------------------------------------------------"
 
 for n in 12 13 14; do
-    echo "Testing n=$n..."
-
     # V3
-    echo "  Running V3..."
-    OUT3=$(OMP_NUM_THREADS=12 srun --ntasks=8 --cpus-per-task=$SLURM_CPUS_PER_TASK --cpu-bind=cores --distribution=block:block ./build/golomb_mpi_v3 $n 2>&1) || true
-    echo "  V3 output: $OUT3" | head -5
+    OUT3=$(run_bench ./build/golomb_mpi_v3 $n)
     T3=$(parse_output "$OUT3" "Time")
     L3=$(parse_output "$OUT3" "Length")
     S3=$(parse_output "$OUT3" "States")
@@ -82,9 +86,7 @@ for n in 12 13 14; do
     printf "%-4s %-8s %-12s %-8s %-10s\n" "$n" "V3" "$T3" "$L3" "-"
 
     # V4
-    echo "  Running V4..."
-    OUT4=$(OMP_NUM_THREADS=12 srun --ntasks=8 --cpus-per-task=$SLURM_CPUS_PER_TASK --cpu-bind=cores --distribution=block:block ./build/golomb_mpi_v4 $n 2>&1) || true
-    echo "  V4 output: $OUT4" | head -5
+    OUT4=$(run_bench ./build/golomb_mpi_v4 $n)
     T4=$(parse_output "$OUT4" "Time")
     L4=$(parse_output "$OUT4" "Length")
     S4=$(parse_output "$OUT4" "States")
