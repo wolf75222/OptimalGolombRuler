@@ -22,7 +22,7 @@
 set -euo pipefail
 
 romeo_load_armgpu_env
-spack load openmpi
+spack load /i6r3tsl  # openmpi@4.1.7 for ARM
 
 echo "=========================================="
 echo "Golomb Ruler MPI V3 vs V4 (ARM)"
