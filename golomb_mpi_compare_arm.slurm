@@ -2,7 +2,7 @@
 #SBATCH --account=r250127
 #SBATCH --partition=short
 #SBATCH --constraint=armgpu
-#SBATCH --time=0-02:00:00
+#SBATCH --time=0-04:00:00
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=24
@@ -33,6 +33,7 @@
 set -euo pipefail
 
 romeo_load_armgpu_env
+spack load openmpi
 
 echo "=========================================="
 echo "Golomb Ruler MPI Comparison: V1-V3 (ARM)"
@@ -97,10 +98,18 @@ echo "All MPI binaries built successfully!"
 # =============================================================================
 # BENCHMARK CONFIGURATION
 # =============================================================================
-# MPI processes must be power of 2 for V1/V2 (hypercube)
-# V3 works with any number
-MPI_PROCS=(1 2 4 8 16)
-THREADS_PER_PROC=(1 2 4 8 12 24)
+# Configurations optimales uniquement (MPI × Threads = total workers)
+# On teste les configs les plus pertinentes pour 2 noeuds ARM (192 CPUs/noeud)
+#   - 1 MPI × 96t  = 96 workers (baseline single node)
+#   - 2 MPI × 96t  = 192 workers (1 proc/node, optimal)
+#   - 4 MPI × 48t  = 192 workers (2 proc/node)
+#   - 8 MPI × 24t  = 192 workers (4 proc/node)
+MPI_CONFIGS=(
+    "1 96"
+    "2 96"
+    "4 48"
+    "8 24"
+)
 GOLOMB_N=(12 13 14)
 
 export OMP_PLACES=cores
@@ -148,31 +157,30 @@ printf "%-8s %-8s %-8s %-4s %-8s %-12s %-8s %-15s %-15s\n" \
     "MPI" "Threads" "Total" "n" "Version" "Time(s)" "Length" "States" "States/sec"
 echo "----------------------------------------------------------------------------------------------------"
 
-for procs in "${MPI_PROCS[@]}"; do
-    for threads in "${THREADS_PER_PROC[@]}"; do
-        total_workers=$((procs * threads))
+for config in "${MPI_CONFIGS[@]}"; do
+    read -r procs threads <<< "$config"
+    total_workers=$((procs * threads))
 
-        for n in "${GOLOMB_N[@]}"; do
+    for n in "${GOLOMB_N[@]}"; do
 
-            for ver in V1 V2 V3; do
-                case $ver in
-                    V1) binary="./build/golomb_mpi" ;;
-                    V2) binary="./build/golomb_mpi_v2" ;;
-                    V3) binary="./build/golomb_mpi_v3" ;;
-                esac
+        for ver in V1 V2 V3; do
+            case $ver in
+                V1) binary="./build/golomb_mpi" ;;
+                V2) binary="./build/golomb_mpi_v2" ;;
+                V3) binary="./build/golomb_mpi_v3" ;;
+            esac
 
-                output=$(run_mpi_bench "$binary" "$n" "$procs" "$threads")
-                time_val=$(parse_output "$output" "Time")
-                len_val=$(parse_output "$output" "Length")
-                states_val=$(parse_output "$output" "States")
-                sps_val=$(parse_output "$output" "States/sec")
+            output=$(run_mpi_bench "$binary" "$n" "$procs" "$threads")
+            time_val=$(parse_output "$output" "Time")
+            len_val=$(parse_output "$output" "Length")
+            states_val=$(parse_output "$output" "States")
+            sps_val=$(parse_output "$output" "States/sec")
 
-                printf "%-8s %-8s %-8s %-4s %-8s %-12s %-8s %-15s %-15s\n" \
-                    "$procs" "$threads" "$total_workers" "$n" "$ver" "$time_val" "$len_val" "$states_val" "$sps_val"
-                echo "$procs,$threads,$total_workers,$n,$ver,$time_val,$len_val,$states_val,$sps_val" >> "$CSV_FILE"
-            done
-            echo ""
+            printf "%-8s %-8s %-8s %-4s %-8s %-12s %-8s %-15s %-15s\n" \
+                "$procs" "$threads" "$total_workers" "$n" "$ver" "$time_val" "$len_val" "$states_val" "$sps_val"
+            echo "$procs,$threads,$total_workers,$n,$ver,$time_val,$len_val,$states_val,$sps_val" >> "$CSV_FILE"
         done
+        echo ""
     done
 done
 
@@ -189,20 +197,19 @@ printf "%-8s %-8s %-4s %-12s %-12s %-12s %-10s %-10s\n" \
     "MPI" "Threads" "n" "V1(s)" "V2(s)" "V3(s)" "V2/V1" "V3/V1"
 echo "--------------------------------------------------------------------------------"
 
-for procs in "${MPI_PROCS[@]}"; do
-    for threads in "${THREADS_PER_PROC[@]}"; do
-        for n in "${GOLOMB_N[@]}"; do
-            v1_time=$(grep "^$procs,$threads,.*,$n,V1," "$CSV_FILE" | cut -d',' -f6)
-            v2_time=$(grep "^$procs,$threads,.*,$n,V2," "$CSV_FILE" | cut -d',' -f6)
-            v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
+for config in "${MPI_CONFIGS[@]}"; do
+    read -r procs threads <<< "$config"
+    for n in "${GOLOMB_N[@]}"; do
+        v1_time=$(grep "^$procs,$threads,.*,$n,V1," "$CSV_FILE" | cut -d',' -f6)
+        v2_time=$(grep "^$procs,$threads,.*,$n,V2," "$CSV_FILE" | cut -d',' -f6)
+        v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
 
-            if [[ -n "$v1_time" && -n "$v2_time" && -n "$v3_time" && "$v2_time" != "0" && "$v3_time" != "0" ]]; then
-                speedup_v2=$(echo "scale=2; $v1_time / $v2_time" | bc 2>/dev/null || echo "N/A")
-                speedup_v3=$(echo "scale=2; $v1_time / $v3_time" | bc 2>/dev/null || echo "N/A")
-                printf "%-8s %-8s %-4s %-12s %-12s %-12s %-10s %-10s\n" \
-                    "$procs" "$threads" "$n" "$v1_time" "$v2_time" "$v3_time" "${speedup_v2}x" "${speedup_v3}x"
-            fi
-        done
+        if [[ -n "$v1_time" && -n "$v2_time" && -n "$v3_time" && "$v2_time" != "0" && "$v3_time" != "0" ]]; then
+            speedup_v2=$(echo "scale=2; $v1_time / $v2_time" | bc 2>/dev/null || echo "N/A")
+            speedup_v3=$(echo "scale=2; $v1_time / $v3_time" | bc 2>/dev/null || echo "N/A")
+            printf "%-8s %-8s %-4s %-12s %-12s %-12s %-10s %-10s\n" \
+                "$procs" "$threads" "$n" "$v1_time" "$v2_time" "$v3_time" "${speedup_v2}x" "${speedup_v3}x"
+        fi
     done
 done
 
@@ -223,20 +230,19 @@ for n in "${GOLOMB_N[@]}"; do
     # Get baseline (1 MPI, 96 threads)
     base_time=$(grep "^1,96,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
 
-    for procs in "${MPI_PROCS[@]}"; do
-        for threads in "${THREADS_PER_PROC[@]}"; do
-            total_workers=$((procs * threads))
-            v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
-            v3_sps=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f9)
+    for config in "${MPI_CONFIGS[@]}"; do
+        read -r procs threads <<< "$config"
+        total_workers=$((procs * threads))
+        v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
+        v3_sps=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f9)
 
-            if [[ -n "$v3_time" && -n "$base_time" && "$v3_time" != "0" ]]; then
-                ideal_speedup=$(echo "scale=2; $total_workers / 96" | bc)
-                actual_speedup=$(echo "scale=2; $base_time / $v3_time" | bc 2>/dev/null || echo "1")
-                efficiency=$(echo "scale=1; 100 * $actual_speedup / $ideal_speedup" | bc 2>/dev/null || echo "N/A")
-                printf "%-8s %-8s %-8s %-4s %-12s %-12s %-12s\n" \
-                    "$procs" "$threads" "$total_workers" "$n" "$v3_time" "$v3_sps" "${efficiency}%"
-            fi
-        done
+        if [[ -n "$v3_time" && -n "$base_time" && "$v3_time" != "0" ]]; then
+            ideal_speedup=$(echo "scale=2; $total_workers / 96" | bc)
+            actual_speedup=$(echo "scale=2; $base_time / $v3_time" | bc 2>/dev/null || echo "1")
+            efficiency=$(echo "scale=1; 100 * $actual_speedup / $ideal_speedup" | bc 2>/dev/null || echo "N/A")
+            printf "%-8s %-8s %-8s %-4s %-12s %-12s %-12s\n" \
+                "$procs" "$threads" "$total_workers" "$n" "$v3_time" "$v3_sps" "${efficiency}%"
+        fi
     done
     echo ""
 done
@@ -254,22 +260,21 @@ printf "%-8s %-8s %-4s %-12s %-12s %-10s\n" \
     "MPI" "Threads" "n" "V2-hyper(s)" "V3-simple(s)" "Winner"
 echo "--------------------------------------------------------------"
 
-for procs in "${MPI_PROCS[@]}"; do
-    for threads in "${THREADS_PER_PROC[@]}"; do
-        for n in "${GOLOMB_N[@]}"; do
-            v2_time=$(grep "^$procs,$threads,.*,$n,V2," "$CSV_FILE" | cut -d',' -f6)
-            v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
+for config in "${MPI_CONFIGS[@]}"; do
+    read -r procs threads <<< "$config"
+    for n in "${GOLOMB_N[@]}"; do
+        v2_time=$(grep "^$procs,$threads,.*,$n,V2," "$CSV_FILE" | cut -d',' -f6)
+        v3_time=$(grep "^$procs,$threads,.*,$n,V3," "$CSV_FILE" | cut -d',' -f6)
 
-            if [[ -n "$v2_time" && -n "$v3_time" && "$v2_time" != "0" && "$v3_time" != "0" ]]; then
-                if (( $(echo "$v2_time < $v3_time" | bc -l) )); then
-                    winner="V2-hyper"
-                else
-                    winner="V3-simple"
-                fi
-                printf "%-8s %-8s %-4s %-12s %-12s %-10s\n" \
-                    "$procs" "$threads" "$n" "$v2_time" "$v3_time" "$winner"
+        if [[ -n "$v2_time" && -n "$v3_time" && "$v2_time" != "0" && "$v3_time" != "0" ]]; then
+            if (( $(echo "$v2_time < $v3_time" | bc -l) )); then
+                winner="V2-hyper"
+            else
+                winner="V3-simple"
             fi
-        done
+            printf "%-8s %-8s %-4s %-12s %-12s %-10s\n" \
+                "$procs" "$threads" "$n" "$v2_time" "$v3_time" "$winner"
+        fi
     done
 done
 

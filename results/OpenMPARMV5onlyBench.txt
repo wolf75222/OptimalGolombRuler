@@ -1,0 +1,216 @@
+cat job_arm.261628.out
+Loading aarch64 (arm, gpus available) environment
+Environment loaded. Spack available.
+==========================================
+Golomb Ruler OpenMP V5 Benchmark (ARM)
+==========================================
+PWD at start: /home/rmdraux/OptimalGolombRuler
+SLURM_SUBMIT_DIR: /gpfs/home/rmdraux/OptimalGolombRuler
+NodeList: romeo-a046
+Total CPUs: 192
+Exclusive: YES
+Date: Thu Jan  8 12:20:26 CET 2026
+
+CPU Info:
+Architecture:                         aarch64
+CPU(s):                               288
+Model name:                           Neoverse-V2
+Thread(s) per core:                   1
+Core(s) per socket:                   72
+Socket(s):                            4
+CPU(s) scaling MHz:                   91%
+CPU max MHz:                          3429.0000
+NUMA node(s):                         36
+NUMA node0 CPU(s):                    0-71
+NUMA node1 CPU(s):                    72-143
+NUMA node2 CPU(s):                    144-215
+NUMA node3 CPU(s):                    216-287
+NUMA node4 CPU(s):                    
+NUMA node5 CPU(s):                    
+NUMA node6 CPU(s):                    
+NUMA node7 CPU(s):                    
+NUMA node8 CPU(s):                    
+NUMA node9 CPU(s):                    
+NUMA node10 CPU(s):                   
+NUMA node11 CPU(s):                   
+NUMA node12 CPU(s):                   
+NUMA node13 CPU(s):                   
+NUMA node14 CPU(s):                   
+NUMA node15 CPU(s):                   
+NUMA node16 CPU(s):                   
+NUMA node17 CPU(s):                   
+NUMA node18 CPU(s):                   
+NUMA node19 CPU(s):                   
+NUMA node20 CPU(s):                   
+NUMA node21 CPU(s):                   
+NUMA node22 CPU(s):                   
+NUMA node23 CPU(s):                   
+NUMA node24 CPU(s):                   
+NUMA node25 CPU(s):                   
+NUMA node26 CPU(s):                   
+NUMA node27 CPU(s):                   
+NUMA node28 CPU(s):                   
+NUMA node29 CPU(s):                   
+NUMA node30 CPU(s):                   
+NUMA node31 CPU(s):                   
+NUMA node32 CPU(s):                   
+NUMA node33 CPU(s):                   
+NUMA node34 CPU(s):                   
+NUMA node35 CPU(s):                   
+Building in: /scratch_p/rmdraux/261628/OptimalGolombRuler
+
+==========================================
+Building OpenMP V5 (ARM)
+==========================================
+rm -rf build
+Using ARCH_FLAGS: -march=native -mtune=native
+Building openmp_v5...
+mkdir -p build
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v5_search_v5.o src/search_v5.cpp
+g++ -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/v5_main_openmp_v5.o src/main_openmp_v5.cpp
+g++ -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_openmp_v5 build/v5_search_v5.o build/v5_main_openmp_v5.o
+
+Contents of build/:
+total 1.0K
+drwxr-xr-x 2 rmdraux rmdraux 4.0K Jan  8 12:20 .
+drwxr-xr-x 9 rmdraux rmdraux 4.0K Jan  8 12:20 ..
+-rwxr-xr-x 1 rmdraux rmdraux  73K Jan  8 12:20 golomb_openmp_v5
+-rw-r--r-- 1 rmdraux rmdraux  61K Jan  8 12:20 v5_main_openmp_v5.o
+-rw-r--r-- 1 rmdraux rmdraux  61K Jan  8 12:20 v5_search_v5.o
+V5 binary built successfully!
+
+==========================================
+Starting ARM benchmarks...
+==========================================
+
+Threads  n    Version  Binding  Time(s)      Length   States          States/sec     
+--------------------------------------------------------------------------------------------
+8        12   V5       close    0.305        85       204578961       6.70e+08       
+
+8        13   V5       close    6.064        106      3926545197      6.48e+08       
+
+8        14   V5       close    86.820       127      53464993698     6.16e+08       
+
+16       12   V5       close    0.151        85       204361213       1.35e+09       
+
+16       13   V5       close    3.036        106      3925781051      1.29e+09       
+
+16       14   V5       close    43.635       127      53451349126     1.22e+09       
+
+32       12   V5       close    0.077        85       204258933       2.66e+09       
+
+32       13   V5       close    1.518        106      3922830891      2.58e+09       
+
+32       14   V5       close    21.732       127      53444924848     2.46e+09       
+
+64       12   V5       close    0.040        85       203832961       5.13e+09       
+
+64       13   V5       close    0.761        106      3919886237      5.15e+09       
+
+64       14   V5       close    10.894       127      53455732591     4.91e+09       
+
+96       12   V5       close    0.029        85       203631257       7.12e+09       
+
+96       13   V5       close    0.511        106      3921927919      7.68e+09       
+
+96       14   V5       close    7.279        127      53490704146     7.35e+09       
+
+192      12   V5       close    0.020        85       203666272       1.03e+10       
+
+192      13   V5       close    0.263        106      3927803862      1.49e+10       
+
+192      14   V5       close    3.653        127      53603859868     1.47e+10       
+
+8        12   V5       spread   0.300        85       204573949       6.81e+08       
+
+8        13   V5       spread   6.079        106      3926602473      6.46e+08       
+
+8        14   V5       spread   87.132       127      53464518964     6.14e+08       
+
+16       12   V5       spread   0.152        85       204364291       1.34e+09       
+
+16       13   V5       spread   3.042        106      3925663723      1.29e+09       
+
+16       14   V5       spread   43.482       127      53451213240     1.23e+09       
+
+32       12   V5       spread   0.079        85       204258707       2.57e+09       
+
+32       13   V5       spread   1.519        106      3922778323      2.58e+09       
+
+32       14   V5       spread   21.812       127      53444575616     2.45e+09       
+
+64       12   V5       spread   0.040        85       203832935       5.04e+09       
+
+64       13   V5       spread   0.764        106      3919876673      5.13e+09       
+
+64       14   V5       spread   10.853       127      53456352569     4.93e+09       
+
+96       12   V5       spread   0.029        85       203638435       6.92e+09       
+
+96       13   V5       spread   0.510        106      3921785931      7.69e+09       
+
+96       14   V5       spread   7.266        127      53492440434     7.36e+09       
+
+192      12   V5       spread   0.020        85       203673340       1.02e+10       
+
+192      13   V5       spread   0.263        106      3927621122      1.49e+10       
+
+192      14   V5       spread   3.659        127      53601188030     1.46e+10       
+
+
+==========================================
+SUMMARY - V5 Results (ARM)
+==========================================
+
+Threads  n    Time(s)      States/sec     
+----------------------------------------------
+8        12   0.305        6.70e+08       
+8        13   6.064        6.48e+08       
+8        14   86.820       6.16e+08       
+16       12   0.151        1.35e+09       
+16       13   3.036        1.29e+09       
+16       14   43.635       1.22e+09       
+32       12   0.077        2.66e+09       
+32       13   1.518        2.58e+09       
+32       14   21.732       2.46e+09       
+64       12   0.040        5.13e+09       
+64       13   0.761        5.15e+09       
+64       14   10.894       4.91e+09       
+96       12   0.029        7.12e+09       
+96       13   0.511        7.68e+09       
+96       14   7.279        7.35e+09       
+192      12   0.020        1.03e+10       
+192      13   0.263        1.49e+10       
+192      14   3.653        1.47e+10       
+
+==========================================
+BINDING COMPARISON - V5 close vs spread
+==========================================
+
+Threads  n    V5-close(s)  V5-spread(s) Winner     Diff%     
+----------------------------------------------------------------------
+8        12   0.305        0.300        spread     N/A%      
+8        13   6.064        6.079        spread     N/A%      
+8        14   86.820       87.132       spread     N/A%      
+16       12   0.151        0.152        spread     N/A%      
+16       13   3.036        3.042        spread     N/A%      
+16       14   43.635       43.482       spread     N/A%      
+32       12   0.077        0.079        spread     N/A%      
+32       13   1.518        1.519        spread     N/A%      
+32       14   21.732       21.812       spread     N/A%      
+64       12   0.040        0.040        spread     N/A%      
+64       13   0.761        0.764        spread     N/A%      
+64       14   10.894       10.853       spread     N/A%      
+96       12   0.029        0.029        spread     N/A%      
+96       13   0.511        0.510        spread     N/A%      
+96       14   7.279        7.266        spread     N/A%      
+192      12   0.020        0.020        spread     N/A%      
+192      13   0.263        0.263        spread     N/A%      
+192      14   3.653        3.659        spread     N/A%      
+
+==========================================
+NUMA SCALING - V5 (close binding)
+==========================================
+
+Threads  n    Time(s)      States/sec   Efficiency  
+--------------------------------------------------------------

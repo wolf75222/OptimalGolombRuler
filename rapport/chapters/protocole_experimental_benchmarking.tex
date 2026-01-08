@@ -45,6 +45,27 @@ Romeo propose trois partitions avec des limites de temps différentes :
 \label{tab:romeo_partitions}
 \end{table}
 
+\subsection{Quotas et limites de ressources}
+
+L'accès aux ressources de calcul est contrôlé par un système de quotas associé à chaque compte utilisateur. Ces quotas limitent le nombre total de CPUs utilisables simultanément :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+Limite CPUs simultanés (GrpCPUs) & 400 \\
+Nœuds x86 max (192 CPUs/nœud) & 2 \\
+Nœuds ARM max (288 CPUs/nœud) & 1 \\
+\bottomrule
+\end{tabular}
+\caption{Quotas de ressources pour le compte projet}
+\label{tab:quotas}
+\end{table}
+
+Cette limite de 400 CPUs simultanés impose des contraintes sur l'exécution parallèle des benchmarks : un job ARM utilisant 192 CPUs empêche le lancement simultané d'un job MPI multi-nœuds (2 nœuds $\times$ 192 CPUs = 384 CPUs supplémentaires dépasserait le quota). Les jobs sont alors placés en file d'attente avec le statut \texttt{AssocGrpCpuLimit} jusqu'à libération des ressources.
+
 \subsection{Architecture des nœuds de calcul}
 
 Romeo dispose de deux familles de nœuds aux caractéristiques distinctes :
