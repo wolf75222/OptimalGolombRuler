@@ -25,7 +25,7 @@ $n$ & Longueur optimale $L^*(n)$ & Source \\
 11 & 72 & Prouvé (1972) \\
 12 & 85 & Prouvé (1979) \\
 13 & 106 & Prouvé (1981) \\
-14 & 127 & Prouvé (distributed.net, 2023) \\
+14 & 127 & Prouvé (1985) \\
 \bottomrule
 \end{tabular}
 \caption{Longueurs optimales de référence pour la validation}
@@ -309,7 +309,89 @@ La version \textbf{V5} atteint un speedup de \textbf{213$\times$} par rapport au
 
 \subsection{Efficacité parallèle}
 
-L'efficacité parallèle mesure l'utilisation effective des ressources : $E(p) = \frac{S(p)}{p} \times 100\%$. La figure~\ref{fig:openmp:efficiency} montre l'efficacité des versions V4, V5 et V6 (les seules à scaler).
+L'efficacité parallèle mesure l'utilisation effective des ressources. Pour calculer correctement cette efficacité, il est essentiel de comparer une version parallèle à sa propre baseline séquentielle (même algorithme).
+
+\paragraph{Baseline séquentielle.}
+Pour mesurer l'efficacité parallèle de V5, nous utilisons le temps séquentiel mesuré de V2 (68.911~s pour $n=13$) comme référence. V5 est une version parallélisée et optimisée de l'algorithme BitSet introduit en V2. Le débit par cœur est similaire : V2 séquentiel atteint $6.17 \times 10^7$ états/s, tandis que V5 à 8 threads atteint $6.6 \times 10^7$ états/s par thread.
+
+\paragraph{Speedup et efficacité V5 (vs V2 séquentiel).}
+
+Le tableau~\ref{tab:v5:real_efficiency} présente le speedup et l'efficacité de V5 par rapport au séquentiel V2 mesuré (68.911~s).
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+Threads & Temps (s) & Speedup vs séq. & Idéal & Efficacité \\
+\midrule
+1 (V2 séq.) & 68.911 & $1.0\times$ & $1\times$ & 100\% \\
+8 & 7.436 & $9.3\times$ & $8\times$ & 116\% \\
+16 & 3.719 & $18.5\times$ & $16\times$ & 116\% \\
+32 & 1.860 & $37.0\times$ & $32\times$ & 116\% \\
+64 & 0.932 & $73.9\times$ & $64\times$ & 115\% \\
+96 & 0.661 & $104.3\times$ & $96\times$ & 109\% \\
+192 & 0.323 & $213.3\times$ & $192\times$ & 111\% \\
+\bottomrule
+\end{tabular}
+\caption{Speedup et efficacité de V5 par rapport au séquentiel V2 mesuré ($n=13$)}
+\label{tab:v5:real_efficiency}
+\end{table}
+
+\paragraph{Interprétation de l'efficacité $>100\%$.}
+L'efficacité apparente supérieure à 100\% s'explique par les différences entre V2 et V5 :
+\begin{itemize}
+    \item V5 utilise \texttt{uint64\_t} au lieu de \texttt{bitset<256>}, soit un débit par cœur $\sim$7\% supérieur
+    \item V5 explore moins d'états grâce à une génération de préfixes optimisée (3.93 vs 4.25 milliards)
+\end{itemize}
+
+Pour isoler le \textbf{vrai scaling parallèle} de V5, analysons l'évolution du débit en fonction du nombre de threads :
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+Threads & Débit (états/s) & Ratio vs 8t & Attendu & Efficacité scaling \\
+\midrule
+8 & $5.28 \times 10^8$ & $1.00\times$ & $1\times$ & 100\% \\
+16 & $1.06 \times 10^9$ & $2.01\times$ & $2\times$ & 100.5\% \\
+32 & $2.11 \times 10^9$ & $4.00\times$ & $4\times$ & 100.0\% \\
+64 & $4.21 \times 10^9$ & $7.97\times$ & $8\times$ & 99.6\% \\
+96 & $5.93 \times 10^9$ & $11.23\times$ & $12\times$ & 93.6\% \\
+192 & $1.22 \times 10^{10}$ & $23.1\times$ & $24\times$ & 96.3\% \\
+\bottomrule
+\end{tabular}
+\caption{Scaling du débit de V5 (efficacité parallèle pure, $n=13$)}
+\label{tab:v5:scaling}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    xlabel={Nombre de threads},
+    ylabel={Speedup vs V2 séquentiel},
+    xmin=0, xmax=200,
+    ymin=0, ymax=230,
+    legend style={at={(0.02,0.98)}, anchor=north west, font=\small},
+    width=0.95\textwidth,
+    height=0.50\textwidth,
+    grid=major,
+]
+% Speedup idéal (linéaire)
+\addplot[thick, dashed, gray] coordinates {
+    (1, 1) (8, 8) (16, 16) (32, 32) (64, 64) (96, 96) (192, 192)
+};
+\addlegendentry{Idéal (linéaire)}
+% V5 speedup réel vs V2 séquentiel
+\addplot[mark=pentagon*, thick, purple, line width=1.5pt] coordinates {
+    (1, 1) (8, 9.3) (16, 18.5) (32, 37.0) (64, 73.9) (96, 104.3) (192, 213.3)
+};
+\addlegendentry{V5 vs V2 séq.}
+\end{axis}
+\end{tikzpicture}
+\caption{Speedup de V5 par rapport au séquentiel V2 ($n=13$)}
+\label{fig:v5:speedup}
+\end{figure}
 
 \begin{figure}[htbp]
 \centering
@@ -318,41 +400,33 @@ L'efficacité parallèle mesure l'utilisation effective des ressources : $E(p) =
     xlabel={Nombre de threads},
     ylabel={Efficacité parallèle (\%)},
     xmin=0, xmax=200,
-    ymin=0, ymax=120,
+    ymin=0, ymax=110,
     legend style={at={(0.98,0.02)}, anchor=south east, font=\small},
     width=0.95\textwidth,
     height=0.45\textwidth,
     grid=major,
 ]
 % Efficacité idéale
-\addplot[thick, dashed, gray, domain=8:192] {100};
+\addplot[thick, dashed, gray, domain=1:192] {100};
 \addlegendentry{Idéal (100\%)}
-% V4 n=13: efficacité = speedup/threads * 100, speedup = 68.911/temps
-% 8: 68.911/53.114/8*100 = 16.2%, 16: 68.911/26.571/16*100 = 16.2%, etc.
-\addplot[mark=diamond*, thick, orange] coordinates {
-    (8, 16.2) (16, 16.2) (32, 16.2) (64, 16.1) (96, 16.1) (192, 15.8)
-};
-% V5 n=13: 8: 68.911/7.436/8*100 = 115.9%
+% V5 efficacité basée sur le scaling du débit
 \addplot[mark=pentagon*, thick, purple, line width=1.5pt] coordinates {
-    (8, 115.9) (16, 115.8) (32, 115.8) (64, 115.5) (96, 108.6) (192, 111.1)
+    (8, 100) (16, 100.5) (32, 100.0) (64, 99.6) (96, 93.6) (192, 96.3)
 };
-% V6 n=13
-\addplot[mark=star, thick, cyan] coordinates {
-    (8, 86.1) (16, 86.1) (32, 86.0) (64, 85.9) (96, 80.3) (192, 82.5)
-};
-\legend{Idéal (100\%), V4, V5, V6}
+\addlegendentry{V5 (scaling débit)}
 \end{axis}
 \end{tikzpicture}
-\caption{Efficacité parallèle des versions V4, V5, V6 pour $n=13$}
+\caption{Efficacité parallèle de V5 basée sur le scaling du débit ($n=13$)}
 \label{fig:openmp:efficiency}
 \end{figure}
 
-\paragraph{Efficacité super-linéaire de V5.}
-La version V5 affiche une efficacité \textbf{supérieure à 100\%} (speedup super-linéaire). Ce phénomène, bien que contre-intuitif, s'explique par une combinaison d'effets de cache et d'élagage parallèle que nous analysons en détail ci-dessous.
+\begin{result}
+Le scaling parallèle de V5 est \textbf{quasi-linéaire} avec une efficacité de \textbf{93--100\%} de 8 à 192 threads. Le speedup total de $213\times$ par rapport au séquentiel V2 combine le gain algorithmique ($\sim$1.1$\times$) et le gain de parallélisation ($\sim$190$\times$).
+\end{result}
 
-\subsubsection{Analyse détaillée des effets de cache}
+\subsubsection{Analyse des optimisations de cache}
 
-Le speedup super-linéaire ($>100\%$ d'efficacité) provient principalement de la meilleure utilisation de la hiérarchie de cache lorsque le travail est distribué entre plusieurs threads. Examinons les structures de données critiques du fichier \texttt{src/search\_v5.cpp}.
+Les excellentes performances de V5 s'expliquent par une conception optimisée pour la hiérarchie de cache. Examinons les structures de données critiques du fichier \texttt{src/search\_v5.cpp}.
 
 \paragraph{Structure BitSet128 : 16 octets dans les registres.}
 
@@ -409,15 +483,14 @@ Variables locales (\texttt{threadExplored}, indices) & $\sim$64 o & Registres/L1
 
 Le cache L1 d'un cœur AMD EPYC 9654 est de 32~Ko. L'empreinte de $\sim$1.7~Ko représente seulement \textbf{5\%} du cache L1, garantissant que toutes les données critiques restent en cache pendant toute l'exécution.
 
-\paragraph{Pourquoi le parallélisme améliore l'utilisation du cache.}
+\paragraph{Pourquoi le scaling est quasi-linéaire.}
 
-En exécution \textbf{séquentielle}, un seul cœur doit explorer tout l'arbre de recherche. Bien que le working set instantané soit petit, les accès mémoire à l'espace des préfixes (\texttt{prefixes} vector) peuvent générer des défauts de cache L1/L2 lorsque le vecteur dépasse la capacité du cache.
+L'excellent scaling de V5 (96--100\% d'efficacité) s'explique par plusieurs facteurs :
 
-En exécution \textbf{parallèle}, chaque thread explore un sous-ensemble des préfixes. Avec 192 threads et $\sim$100\,000 préfixes pour $n=13$, chaque thread traite en moyenne $\sim$520 préfixes. Cela signifie :
 \begin{itemize}
-    \item \textbf{Moins de contention L3} : Les threads sur un même socket partagent le cache L3, mais avec des working sets disjoints.
-    \item \textbf{Meilleure localité temporelle} : Chaque thread accède répétitivement à son sous-ensemble de données.
-    \item \textbf{Prefetching efficace} : Le pattern d'accès séquentiel au vecteur de préfixes permet au prefetcher matériel d'anticiper les accès.
+    \item \textbf{Working set minimal} : Chaque thread n'utilise que $\sim$1.7~Ko, soit 5\% du cache L1 de 32~Ko.
+    \item \textbf{Indépendance des sous-problèmes} : La génération de préfixes crée des tâches complètement indépendantes, sans synchronisation pendant l'exploration.
+    \item \textbf{Communication minimale} : Seul le bound global est partagé, via une variable atomique accédée en lecture la plupart du temps.
 \end{itemize}
 
 \paragraph{Prévention du false sharing.}
@@ -432,9 +505,9 @@ struct alignas(64) ThreadBestV5 {  // alignas(64) = 1 cache line
 
 L'alignement sur 64 octets (taille d'une ligne de cache) garantit que chaque thread possède sa propre ligne de cache pour sa meilleure solution locale, évitant le \textit{false sharing} qui invaliderait les caches des autres cœurs à chaque mise à jour.
 
-\paragraph{Réduction des états explorés par élagage parallèle.}
+\paragraph{Propagation du bound global et élagage.}
 
-Le second facteur de speedup super-linéaire est l'élagage plus agressif grâce à la mise à jour rapide du bound global :
+La propagation atomique du bound global permet un élagage efficace :
 
 \begin{lstlisting}[language=C++, caption={Mise à jour atomique du bound global (search\_v5.cpp:273-277)}]
 // Atomic compare-exchange pour propager rapidement le meilleur bound
@@ -445,7 +518,7 @@ while (solutionLen < expected &&
 }
 \end{lstlisting}
 
-Avec 192 threads explorant en parallèle, une bonne solution est trouvée statistiquement plus tôt. Cette solution est immédiatement propagée à tous les threads via \texttt{globalBestLen}, permettant un élagage plus agressif :
+Avec plusieurs threads explorant en parallèle, une bonne solution peut être trouvée plus tôt. Cette solution est immédiatement propagée à tous les threads via \texttt{globalBestLen}, permettant un élagage plus efficace :
 
 \begin{lstlisting}[language=C++, caption={Élagage avec le bound global (search\_v5.cpp:217-226)}]
 const int currentGlobalBest = globalBestLen.load(std::memory_order_relaxed);
@@ -460,17 +533,15 @@ if (frame.ruler_length + minAdditionalLength >= currentGlobalBest) [[unlikely]] 
 }
 \end{lstlisting}
 
-\paragraph{Quantification de l'effet super-linéaire.}
+\paragraph{Bilan des facteurs de performance.}
 
-Pour $n=13$ avec 8 threads, le speedup théorique serait $8\times$. Or, nous observons un speedup de $9.3\times$ (efficacité de 116\%). Ce gain supplémentaire de 16\% provient de :
+L'efficacité parallèle quasi-linéaire (96--100\%) de V5 est le résultat de plusieurs optimisations combinées :
 \begin{itemize}
-    \item \textbf{$\sim$8\%} : Meilleure utilisation du cache L1/L2
-    \item \textbf{$\sim$8\%} : Élagage anticipé grâce à la découverte parallèle de bornes
+    \item \textbf{Structures de données compactes} : BitSet128 (16 octets) dans les registres
+    \item \textbf{Absence de contention} : Chaque thread travaille sur des préfixes indépendants
+    \item \textbf{Prévention du false sharing} : Alignement sur cache line (64 octets)
+    \item \textbf{Élagage global} : Propagation atomique du meilleur bound
 \end{itemize}
-
-\begin{result}
-Le speedup super-linéaire de V5 ($>100\%$ d'efficacité) est dû à deux facteurs complémentaires : (1) chaque thread a un working set de $\sim$1.7~Ko qui tient entièrement dans le cache L1 de 32~Ko, et (2) la propagation atomique du bound global permet un élagage plus agressif lorsque de bonnes solutions sont découvertes en parallèle.
-\end{result}
 
 \subsection{Débit (États/seconde)}
 
@@ -573,14 +644,14 @@ La figure~\ref{fig:seq_vs_parallel} synthétise les gains obtenus à chaque éta
 \textbf{Configuration} & \textbf{Temps (s)} & \textbf{Speedup vs Séq.V1} & \textbf{Speedup vs étape préc.} \\
 \midrule
 Séquentiel V1 & 395.54 & $1\times$ & -- \\
-Séquentiel V2 (BitSet) & 68.91 & $5.7\times$ & $5.7\times$ \\
-V5 OpenMP @ 8 threads & 7.44 & $53\times$ & $9.3\times$ \\
-V5 OpenMP @ 32 threads & 1.86 & $213\times$ & $4.0\times$ \\
-V5 OpenMP @ 96 threads & 0.66 & $599\times$ & $2.8\times$ \\
-V5 OpenMP @ 192 threads & 0.32 & $1236\times$ & $2.1\times$ \\
+Séquentiel V2 (BitSet) & 68.91 & $5.7\times$ & $5.7\times$ (algo) \\
+V5 OpenMP @ 8 threads & 7.44 & $53\times$ & $9.3\times$ (algo+para) \\
+V5 OpenMP @ 32 threads & 1.86 & $213\times$ & $4.0\times$ (para) \\
+V5 OpenMP @ 96 threads & 0.66 & $599\times$ & $2.8\times$ (para) \\
+V5 OpenMP @ 192 threads & 0.32 & $1236\times$ & $2.1\times$ (para) \\
 \bottomrule
 \end{tabular}
-\caption{Décomposition des gains de performance pour $n=13$}
+\caption{Décomposition des gains de performance pour $n=13$. Note : le passage V2$\to$V5@8t inclut à la fois le gain algorithmique (BitSet128 vs bitset<256>) et la parallélisation sur 8 threads.}
 \label{tab:gains_decomposition}
 \end{table}
 
@@ -755,32 +826,58 @@ Les optimisations manuelles (intrinsèques SIMD, prefetch) interfèrent avec les
 \label{sec:resultats:mpi}
 % =============================================================================
 
-Les benchmarks MPI ont été configurés pour comparer trois versions :
+Les benchmarks MPI comparent trois versions de l'algorithme hybride :
 \begin{itemize}
     \item \textbf{V1} : Hypercube + loop unrolling original
     \item \textbf{V2} : Hypercube + BitSet128 shift optimization
     \item \textbf{V3} : MPI\_Allreduce (sans hypercube) + BitSet128
 \end{itemize}
 
-\begin{important}{Benchmarks MPI en attente}
-Les jobs MPI sont actuellement en file d'attente sur le cluster Romeo (statut \texttt{PENDING}). Les résultats seront ajoutés dès leur disponibilité. L'analyse présentée ci-dessous est théorique en attendant les données expérimentales.
-\end{important}
+\subsection{Configurations testées}
 
-\subsection{Analyse théorique des gains attendus}
+Plutôt que de tester toutes les combinaisons MPI $\times$ threads possibles, nous avons sélectionné des configurations optimales à total workers constant :
 
-La parallélisation MPI apporte deux avantages principaux :
-\begin{enumerate}
-    \item \textbf{Mémoire distribuée} : Chaque processus possède son espace mémoire, éliminant les contentions de cache.
-    \item \textbf{Scaling au-delà d'un nœud} : Possibilité d'utiliser des centaines de cœurs sur plusieurs nœuds.
-\end{enumerate}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{cccp{5cm}}
+\toprule
+\textbf{MPI} & \textbf{Threads} & \textbf{Total} & \textbf{Justification} \\
+\midrule
+1 & 96 & 96 & Baseline OpenMP (single node) \\
+2 & 96 & 192 & 1 proc/nœud (optimal) \\
+4 & 48 & 192 & 2 proc/nœud \\
+8 & 24 & 192 & 4 proc/nœud \\
+\bottomrule
+\end{tabular}
+\caption{Configurations MPI hybrides testées}
+\label{tab:mpi:configs}
+\end{table}
+
+Cette sélection permet d'évaluer l'impact de la granularité MPI/OpenMP sur les performances tout en utilisant le même nombre total de workers.
+
+\subsection{Analyse des patterns de communication}
 
 L'overhead de communication dépend du pattern utilisé :
 \begin{itemize}
-    \item Hypercube (V1, V2) : $O(\log P)$ étapes de communication
-    \item Allreduce (V3) : Optimisé par MPI, généralement $O(\log P)$ également
+    \item \textbf{Hypercube (V1, V2)} : $O(\log P)$ étapes de communication. Chaque processus communique avec $\log_2(P)$ voisins pour propager le meilleur bound.
+    \item \textbf{Allreduce (V3)} : Utilise \texttt{MPI\_Allreduce} avec \texttt{MPI\_MIN}. Optimisé par la bibliothèque MPI, généralement $O(\log P)$ également mais avec moins de code applicatif.
 \end{itemize}
 
 Pour le problème de Golomb, la communication se limite à la propagation du meilleur bound global, ce qui représente une fraction négligeable du temps total pour des recherches de plusieurs secondes.
+
+\begin{important}{Benchmarks MPI en cours}
+Les résultats MPI détaillés seront ajoutés dès la fin des jobs sur le cluster Romeo. L'analyse ci-dessous est théorique.
+\end{important}
+
+\subsection{Gains attendus}
+
+La parallélisation MPI apporte deux avantages principaux :
+\begin{enumerate}
+    \item \textbf{Mémoire distribuée} : Chaque processus possède son espace mémoire, éliminant les contentions de cache L3 partagé.
+    \item \textbf{Scaling multi-nœuds} : Possibilité d'utiliser 384 cœurs (2 nœuds) au lieu de 192 (1 nœud).
+\end{enumerate}
+
+Théoriquement, la configuration 2 MPI $\times$ 96 threads devrait offrir les meilleures performances car elle minimise les communications tout en bénéficiant de la localité NUMA.
 
 % =============================================================================
 \section{Discussion : optimisations et principes HPC}
@@ -983,12 +1080,12 @@ Threads & \multicolumn{2}{c}{$n=12$} & \multicolumn{2}{c}{$n=13$} & \multicolumn
 \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
  & Temps (s) & États/s & Temps (s) & États/s & Temps (s) & États/s \\
 \midrule
-8 & 0.305 & $6.70 \times 10^8$ & 6.064 & $6.48 \times 10^8$ & 86.820 & $6.16 \times 10^8$ \\
-16 & 0.151 & $1.35 \times 10^9$ & 3.036 & $1.29 \times 10^9$ & 43.635 & $1.22 \times 10^9$ \\
-32 & 0.077 & $2.66 \times 10^9$ & 1.518 & $2.58 \times 10^9$ & 21.732 & $2.46 \times 10^9$ \\
-64 & 0.040 & $5.13 \times 10^9$ & 0.761 & $5.15 \times 10^9$ & 10.894 & $4.91 \times 10^9$ \\
-96 & 0.029 & $7.12 \times 10^9$ & 0.511 & $7.68 \times 10^9$ & 7.279 & $7.35 \times 10^9$ \\
-192 & 0.020 & $1.03 \times 10^{10}$ & 0.263 & $1.49 \times 10^{10}$ & 3.653 & $1.47 \times 10^{10}$ \\
+8 & 0.300 & $6.81 \times 10^8$ & 6.031 & $6.51 \times 10^8$ & 86.727 & $6.16 \times 10^8$ \\
+16 & 0.150 & $1.36 \times 10^9$ & 3.018 & $1.30 \times 10^9$ & 43.254 & $1.24 \times 10^9$ \\
+32 & 0.076 & $2.68 \times 10^9$ & 1.513 & $2.59 \times 10^9$ & 21.753 & $2.46 \times 10^9$ \\
+64 & 0.039 & $5.18 \times 10^9$ & 0.759 & $5.16 \times 10^9$ & 10.856 & $4.92 \times 10^9$ \\
+96 & 0.028 & $7.30 \times 10^9$ & 0.508 & $7.72 \times 10^9$ & 7.237 & $7.39 \times 10^9$ \\
+192 & 0.019 & $1.05 \times 10^{10}$ & 0.260 & $1.51 \times 10^{10}$ & 3.633 & $1.48 \times 10^{10}$ \\
 \bottomrule
 \end{tabular}
 \caption{Performances de la version V5 sur ARM Neoverse-V2}
@@ -1012,15 +1109,15 @@ Threads & \multicolumn{2}{c}{$n=12$} & \multicolumn{2}{c}{$n=13$} & \multicolumn
 ]
 % n=12
 \addplot[mark=*, thick, blue] coordinates {
-    (8, 0.305) (16, 0.151) (32, 0.077) (64, 0.040) (96, 0.029) (192, 0.020)
+    (8, 0.300) (16, 0.150) (32, 0.076) (64, 0.039) (96, 0.028) (192, 0.019)
 };
 % n=13
 \addplot[mark=square*, thick, red] coordinates {
-    (8, 6.064) (16, 3.036) (32, 1.518) (64, 0.761) (96, 0.511) (192, 0.263)
+    (8, 6.031) (16, 3.018) (32, 1.513) (64, 0.759) (96, 0.508) (192, 0.260)
 };
 % n=14
 \addplot[mark=triangle*, thick, green!60!black] coordinates {
-    (8, 86.820) (16, 43.635) (32, 21.732) (64, 10.894) (96, 7.279) (192, 3.653)
+    (8, 86.727) (16, 43.254) (32, 21.753) (64, 10.856) (96, 7.237) (192, 3.633)
 };
 \legend{$n=12$, $n=13$, $n=14$}
 \end{axis}
@@ -1032,9 +1129,9 @@ Threads & \multicolumn{2}{c}{$n=12$} & \multicolumn{2}{c}{$n=13$} & \multicolumn
 \paragraph{Scaling quasi-parfait.}
 L'ARM Neoverse-V2 montre un excellent scaling sur les 192 threads :
 \begin{itemize}
-    \item $n=14$ : de 86.8~s (8 threads) à 3.65~s (192 threads) $\rightarrow$ speedup de $23.8\times$ pour $24\times$ threads
+    \item $n=14$ : de 86.7~s (8 threads) à 3.63~s (192 threads) $\rightarrow$ speedup de $23.9\times$ pour $24\times$ threads
     \item Efficacité parallèle $> 99\%$ jusqu'à 64 threads
-    \item Débit maximal : \textbf{14.9 milliards d'états/seconde} pour $n=13$ à 192 threads
+    \item Débit maximal : \textbf{15.1 milliards d'états/seconde} pour $n=13$ à 192 threads
 \end{itemize}
 
 \subsubsection{Comparaison ARM vs x86}
@@ -1047,12 +1144,12 @@ Le tableau~\ref{tab:arm:vs:x86} compare directement les performances des deux ar
 \toprule
 Threads & x86 (EPYC 9654) & ARM (Neoverse-V2) & Speedup ARM & Gain \\
 \midrule
-8 & 7.436 s & 6.064 s & $1.23\times$ & +23\% \\
-16 & 3.719 s & 3.036 s & $1.22\times$ & +22\% \\
-32 & 1.860 s & 1.518 s & $1.23\times$ & +23\% \\
-64 & 0.932 s & 0.761 s & $1.22\times$ & +22\% \\
-96 & 0.661 s & 0.511 s & $1.29\times$ & +29\% \\
-192 & 0.323 s & 0.263 s & $1.23\times$ & +23\% \\
+8 & 7.436 s & 6.031 s & $1.23\times$ & +23\% \\
+16 & 3.719 s & 3.018 s & $1.23\times$ & +23\% \\
+32 & 1.860 s & 1.513 s & $1.23\times$ & +23\% \\
+64 & 0.932 s & 0.759 s & $1.23\times$ & +23\% \\
+96 & 0.661 s & 0.508 s & $1.30\times$ & +30\% \\
+192 & 0.323 s & 0.260 s & $1.24\times$ & +24\% \\
 \bottomrule
 \end{tabular}
 \caption{Comparaison ARM Neoverse-V2 vs AMD EPYC 9654 ($n=13$, V5)}
@@ -1077,7 +1174,7 @@ Threads & x86 (EPYC 9654) & ARM (Neoverse-V2) & Speedup ARM & Gain \\
     (8, 7.436) (16, 3.719) (32, 1.860) (64, 0.932) (96, 0.661) (192, 0.323)
 };
 \addplot[mark=square*, red, thick] coordinates {
-    (8, 6.064) (16, 3.036) (32, 1.518) (64, 0.761) (96, 0.511) (192, 0.263)
+    (8, 6.031) (16, 3.018) (32, 1.513) (64, 0.759) (96, 0.508) (192, 0.260)
 };
 \legend{x86 EPYC 9654, ARM Neoverse-V2}
 \end{axis}
@@ -1105,7 +1202,7 @@ Threads & x86 (EPYC 9654) & ARM (Neoverse-V2) & Speedup ARM & Gain \\
     (8, 5.28e8) (16, 1.06e9) (32, 2.11e9) (64, 4.21e9) (96, 5.93e9) (192, 1.22e10)
 };
 \addplot[mark=square*, red, thick] coordinates {
-    (8, 6.48e8) (16, 1.29e9) (32, 2.58e9) (64, 5.15e9) (96, 7.68e9) (192, 1.49e10)
+    (8, 6.51e8) (16, 1.30e9) (32, 2.59e9) (64, 5.16e9) (96, 7.72e9) (192, 1.51e10)
 };
 \legend{x86 EPYC 9654, ARM Neoverse-V2}
 \end{axis}
@@ -1125,7 +1222,7 @@ L'architecture ARM Neoverse-V2 surpasse l'AMD EPYC 9654 de \textbf{23--30\%} de 
 \end{itemize}
 
 \begin{result}
-L'architecture \textbf{ARM Neoverse-V2} est \textbf{22--29\% plus rapide} que l'AMD EPYC 9654 pour notre workload de recherche de Golomb. Le débit maximal atteint \textbf{14.9 milliards d'états/seconde} sur ARM contre 12.2 milliards sur x86. Cette différence reste constante quel que soit le niveau de parallélisme, indiquant une supériorité intrinsèque du cœur ARM pour ce type d'application compute-bound.
+L'architecture \textbf{ARM Neoverse-V2} est \textbf{23--30\% plus rapide} que l'AMD EPYC 9654 pour notre workload de recherche de Golomb. Le débit maximal atteint \textbf{15.1 milliards d'états/seconde} sur ARM contre 12.2 milliards sur x86. Cette différence reste constante quel que soit le niveau de parallélisme, indiquant une supériorité intrinsèque du cœur ARM pour ce type d'application compute-bound.
 \end{result}
 
 \subsubsection{Résultats pour $n=14$ (ARM uniquement)}
@@ -1138,12 +1235,12 @@ Grâce à la rapidité de l'ARM, nous avons pu exécuter des benchmarks pour $n=
 \toprule
 Threads & Temps (s) & États explorés & Débit (états/s) \\
 \midrule
-8 & 86.820 & $5.35 \times 10^{10}$ & $6.16 \times 10^8$ \\
-16 & 43.635 & $5.35 \times 10^{10}$ & $1.22 \times 10^9$ \\
-32 & 21.732 & $5.34 \times 10^{10}$ & $2.46 \times 10^9$ \\
-64 & 10.894 & $5.35 \times 10^{10}$ & $4.91 \times 10^9$ \\
-96 & 7.279 & $5.35 \times 10^{10}$ & $7.35 \times 10^9$ \\
-192 & 3.653 & $5.36 \times 10^{10}$ & $1.47 \times 10^{10}$ \\
+8 & 86.727 & $5.35 \times 10^{10}$ & $6.16 \times 10^8$ \\
+16 & 43.254 & $5.35 \times 10^{10}$ & $1.24 \times 10^9$ \\
+32 & 21.753 & $5.34 \times 10^{10}$ & $2.46 \times 10^9$ \\
+64 & 10.856 & $5.35 \times 10^{10}$ & $4.92 \times 10^9$ \\
+96 & 7.237 & $5.35 \times 10^{10}$ & $7.39 \times 10^9$ \\
+192 & 3.633 & $5.36 \times 10^{10}$ & $1.48 \times 10^{10}$ \\
 \bottomrule
 \end{tabular}
 \caption{Performances V5 pour $n=14$ sur ARM Neoverse-V2}
@@ -1151,7 +1248,7 @@ Threads & Temps (s) & États explorés & Débit (états/s) \\
 \end{table}
 
 \begin{result}
-Pour $n=14$, l'algorithme explore \textbf{53.6 milliards d'états} et trouve la règle optimale de longueur $L^*(14)=127$ en seulement \textbf{3.65 secondes} avec 192 threads sur ARM. Cela représente un speedup de \textbf{$> 100\,000\times$} par rapport au temps de calcul original de distributed.net (des mois de calcul distribué en 2023).
+Pour $n=14$, l'algorithme explore \textbf{53.6 milliards d'états} et trouve la règle optimale de longueur $L^*(14)=127$ en seulement \textbf{3.63 secondes} avec 192 threads sur ARM.
 \end{result}
 
 % =============================================================================

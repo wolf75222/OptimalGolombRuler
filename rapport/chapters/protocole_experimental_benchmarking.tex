@@ -317,25 +317,36 @@ Initialiser avec la longueur optimale connue ($L^*(n)$) ne \textit{triche} pas :
 \label{tab:thread_configs}
 \end{table}
 
-\subsection{Configurations MPI}
+\subsection{Configurations MPI hybrides}
+
+Pour les benchmarks MPI+OpenMP, nous avons sélectionné des configurations optimales plutôt que de tester toutes les combinaisons possibles. L'objectif est de maximiser l'utilisation des ressources tout en minimisant l'overhead de communication.
+
+\paragraph{Critères de sélection.}
+\begin{itemize}
+    \item \textbf{Total workers constant} : chaque configuration utilise le même nombre total de workers ($\text{MPI} \times \text{threads} = 192$ pour 2 nœuds)
+    \item \textbf{Puissances de 2} : le nombre de processus MPI est une puissance de 2 pour supporter l'algorithme hypercube (V1, V2)
+    \item \textbf{Granularité variable} : de gros grains (peu de MPI, beaucoup de threads) à fins grains (beaucoup de MPI, peu de threads)
+\end{itemize}
 
 \begin{table}[H]
 \centering
-\begin{tabular}{ccp{6cm}}
+\begin{tabular}{cccp{5cm}}
 \toprule
-\textbf{Processus MPI} & \textbf{Threads/proc} & \textbf{Configuration} \\
+\textbf{MPI} & \textbf{Threads} & \textbf{Total} & \textbf{Configuration} \\
 \midrule
-1 & 8--96 & Référence OpenMP pure \\
-2 & 4--48 & 2 nœuds, hypercube dim=1 \\
-4 & 2--24 & 4 nœuds, hypercube dim=2 \\
-8 & 1--12 & 8 tâches, hypercube dim=3 \\
-16 & 1--6 & 16 tâches, hypercube dim=4 \\
-32 & 1--3 & 32 tâches, hypercube dim=5 \\
+1 & 96 & 96 & Baseline single-node (OpenMP pur) \\
+2 & 96 & 192 & 1 proc/nœud (optimal NUMA) \\
+4 & 48 & 192 & 2 proc/nœud \\
+8 & 24 & 192 & 4 proc/nœud \\
+16 & 12 & 192 & 8 proc/nœud (x86 seulement) \\
 \bottomrule
 \end{tabular}
-\caption{Configurations MPI testées}
+\caption{Configurations MPI hybrides optimales testées}
 \label{tab:mpi_configs}
 \end{table}
+
+\paragraph{Justification.}
+La configuration 2 MPI $\times$ 96 threads (1 processus par nœud) est théoriquement optimale car elle minimise les communications inter-nœuds tout en maximisant le parallélisme OpenMP intra-nœud. Les configurations avec plus de processus MPI permettent d'évaluer l'overhead de communication et l'impact de la granularité sur les performances.
 
 \section{Métriques de performance}
 
