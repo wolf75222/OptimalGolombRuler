@@ -1,0 +1,213 @@
+cat job_mpi.261668.out
+Loading x86_64 (no gpu) environment
+Environment loaded. Spack available.
+==========================================
+Golomb Ruler MPI Comparison: V1-V3
+==========================================
+PWD at start: /home/rmdraux/OptimalGolombRuler
+SLURM_SUBMIT_DIR: /gpfs/home/rmdraux/OptimalGolombRuler
+NodeList: romeo-c[025-026]
+Nodes: 2
+Tasks per node: 8
+CPUs per task: 24
+Exclusive: YES
+Date: Thu Jan  8 12:40:09 CET 2026
+
+CPU Info:
+Architecture:                         x86_64
+CPU(s):                               384
+Model name:                           AMD EPYC 9654 96-Core Processor
+Thread(s) per core:                   1
+Core(s) per socket:                   96
+Socket(s):                            2
+CPU(s) scaling MHz:                   65%
+CPU max MHz:                          3707.8120
+NUMA node(s):                         8
+NUMA node0 CPU(s):                    0-23
+NUMA node1 CPU(s):                    24-47
+NUMA node2 CPU(s):                    48-71
+NUMA node3 CPU(s):                    72-95
+NUMA node4 CPU(s):                    96-119
+NUMA node5 CPU(s):                    120-143
+NUMA node6 CPU(s):                    144-167
+NUMA node7 CPU(s):                    168-191
+Building in: /scratch_p/rmdraux/261668/OptimalGolombRuler
+
+==========================================
+Building all MPI versions
+==========================================
+rm -rf build
+Using ARCH_FLAGS: -march=native -mtune=native
+Building mpi...
+mkdir -p build
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi_search_mpi.o src/search_mpi.cpp
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi_main_mpi.o src/main_mpi.cpp
+mpicxx -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_mpi build/mpi_search_mpi.o build/mpi_main_mpi.o
+Building mpi_v2...
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi2_search_mpi_v2.o src/search_mpi_v2.cpp
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi2_main_mpi_v2.o src/main_mpi_v2.cpp
+mpicxx -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_mpi_v2 build/mpi2_search_mpi_v2.o build/mpi2_main_mpi_v2.o
+Building mpi_v3...
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi3_search_mpi_v3.o src/search_mpi_v3.cpp
+mpicxx -std=c++20 -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -fopenmp -Iinclude -Wall -Wextra -DNDEBUG -c -o build/mpi3_main_mpi_v3.o src/main_mpi_v3.cpp
+mpicxx -fopenmp -O3 -march=native -mtune=native -funroll-loops -fomit-frame-pointer -flto -flto -o build/golomb_mpi_v3 build/mpi3_search_mpi_v3.o build/mpi3_main_mpi_v3.o
+
+Contents of build/:
+total 201K
+drwxr-xr-x 2 rmdraux rmdraux 4.0K Jan  8 12:40 .
+drwxr-xr-x 9 rmdraux rmdraux 4.0K Jan  8 12:40 ..
+-rwxr-xr-x 1 rmdraux rmdraux  36K Jan  8 12:40 golomb_mpi
+-rwxr-xr-x 1 rmdraux rmdraux  26K Jan  8 12:40 golomb_mpi_v2
+-rwxr-xr-x 1 rmdraux rmdraux  25K Jan  8 12:40 golomb_mpi_v3
+-rw-r--r-- 1 rmdraux rmdraux  37K Jan  8 12:40 mpi2_main_mpi_v2.o
+-rw-r--r-- 1 rmdraux rmdraux  41K Jan  8 12:40 mpi2_search_mpi_v2.o
+-rw-r--r-- 1 rmdraux rmdraux  35K Jan  8 12:40 mpi3_main_mpi_v3.o
+-rw-r--r-- 1 rmdraux rmdraux  40K Jan  8 12:40 mpi3_search_mpi_v3.o
+-rw-r--r-- 1 rmdraux rmdraux  79K Jan  8 12:40 mpi_main_mpi.o
+-rw-r--r-- 1 rmdraux rmdraux  30K Jan  8 12:40 mpi_search_mpi.o
+All MPI binaries built successfully!
+
+==========================================
+Starting MPI benchmarks...
+==========================================
+
+MPI      Threads  Total    n    Version  Time(s)      Length   States          States/sec     
+----------------------------------------------------------------------------------------------------
+1        96       96       12   V1       4.299        85       595464846       1.38e+08       
+1        96       96       12   V2       0.899        85       204369807       227.45         
+1        96       96       12   V3       0.874        85       204370741       233.84         
+
+1        96       96       13   V1       62.391       106      8429594197      1.35e+08       
+1        96       96       13   V2       17.729       106      3924597497      221.37         
+1        96       96       13   V3       17.778       106      3924261477      220.74         
+
+1        96       96       14   V1       958.124      127      121267364944    1.27e+08       
+1        96       96       14   V2       165.123      127      53466569572     323.80         
+1        96       96       14   V3       164.819      127      53456409386     324.33         
+
+2        96       192      12   V1       4.109        85       609934472       1.48e+08       
+2        96       192      12   V2       2.008        85       204889208       102.03         
+2        96       192      12   V3       1.985        85       204888872       103.20         
+
+2        96       192      13   V1       46.008       106      9355697887      2.03e+08       
+2        96       192      13   V2       11.850       106      3924567479      331.18         
+2        96       192      13   V3       11.638       106      3924315133      337.20         
+
+2        96       192      14   V1       723.892      127      135305518918    1.87e+08       
+2        96       192      14   V2       96.102       127      53516448969     556.87         
+2        96       192      14   V3       95.839       127      53516346201     558.40         
+
+4        48       192      12   V1       6.663        85       998136628       1.50e+08       
+4        48       192      12   V2       0.215        85       206209723       957.18         
+4        48       192      12   V3       0.228        85       206212833       905.65         
+
+4        48       192      13   V1       87.771       106      13693005223     1.56e+08       
+4        48       192      13   V2       2.967        106      3937863890      1.33           
+4        48       192      13   V3       3.011        106      3937863984      1.31           
+
+4        48       192      14   V1       1487.790     127      194292814168    1.31e+08       
+4        48       192      14   V2       37.119       127      53517878983     1.44           
+4        48       192      14   V3       37.031       127      53517637335     1.45           
+
+8        24       192      12   V1       4.517        85       1242471130      2.75e+08       
+8        24       192      12   V2       0.055        85       207555041       3.81           
+8        24       192      12   V3       0.054        85       207553527       3.85           
+
+8        24       192      13   V1       67.467       106      16780401147     2.49e+08       
+8        24       192      13   V2       0.935        106      3957811141      4.24           
+8        24       192      13   V3       0.935        106      3957810761      4.23           
+
+8        24       192      14   V1       849.285      127      216927914324    2.55e+08       
+8        24       192      14   V2       13.179       127      53524417673     4.06           
+8        24       192      14   V3       13.180       127      53524376281     4.06           
+
+16       12       192      12   V1       5.526        85       1597536522      2.89e+08       
+16       12       192      12   V2       0.036        85       209890243       5.85           
+16       12       192      12   V3       0.038        85       209890561       5.55           
+
+16       12       192      13   V1       67.736       106      21328050780     3.15e+08       
+16       12       192      13   V2       0.672        106      3957870269      5.89           
+16       12       192      13   V3       0.672        106      3957862499      5.89           
+
+16       12       192      14   V1       849.466      127      266783564288    3.14e+08       
+16       12       192      14   V2       9.727        127      53813977965     5.53           
+16       12       192      14   V3       9.720        127      53814032549     5.54           
+
+
+==========================================
+SUMMARY - V2/V3 vs V1 speedup
+==========================================
+
+MPI      Threads  n    V1(s)        V2(s)        V3(s)        V2/V1      V3/V1     
+--------------------------------------------------------------------------------
+1        96       12   4.299        0.899        0.874        4.78x      4.91x     
+1        96       13   62.391       17.729       17.778       3.51x      3.50x     
+1        96       14   958.124      165.123      164.819      5.80x      5.81x     
+2        96       12   4.109        2.008        1.985        2.04x      2.07x     
+2        96       13   46.008       11.850       11.638       3.88x      3.95x     
+2        96       14   723.892      96.102       95.839       7.53x      7.55x     
+4        48       12   6.663        0.215        0.228        30.99x     29.22x    
+4        48       13   87.771       2.967        3.011        29.58x     29.15x    
+4        48       14   1487.790     37.119       37.031       40.08x     40.17x    
+8        24       12   4.517        0.055        0.054        82.12x     83.64x    
+8        24       13   67.467       0.935        0.935        72.15x     72.15x    
+8        24       14   849.285      13.179       13.180       64.44x     64.43x    
+16       12       12   5.526        0.036        0.038        153.50x    145.42x   
+16       12       13   67.736       0.672        0.672        100.79x    100.79x   
+16       12       14   849.466      9.727        9.720        87.33x     87.39x    
+
+==========================================
+MPI SCALING - V3 (best version expected)
+==========================================
+
+MPI      Threads  Total    n    Time(s)      States/sec   Efficiency  
+------------------------------------------------------------------------
+1        96       96       12   0.874        233.84       100.0%      
+2        96       192      12   1.985        103.20       22.0%       
+4        48       192      12   0.228        905.65       191.5%      
+8        24       192      12   0.054        3.85         809.0%      
+16       12       192      12   0.038        5.55         1150.0%     
+
+1        96       96       13   17.778       220.74       100.0%      
+2        96       192      13   11.638       337.20       76.0%       
+4        48       192      13   3.011        1.31         295.0%      
+8        24       192      13   0.935        4.23         950.5%      
+16       12       192      13   0.672        5.89         1322.5%     
+
+1        96       96       14   164.819      324.33       100.0%      
+2        96       192      14   95.839       558.40       85.5%       
+4        48       192      14   37.031       1.45         222.5%      
+8        24       192      14   13.180       4.06         625.0%      
+16       12       192      14   9.720        5.54         847.5%      
+
+
+==========================================
+HYPERCUBE (V2) vs NO-HYPERCUBE (V3)
+==========================================
+
+MPI      Threads  n    V2-hyper(s)  V3-simple(s) Winner    
+--------------------------------------------------------------
+1        96       12   0.899        0.874        V3-simple 
+1        96       13   17.729       17.778       V2-hyper  
+1        96       14   165.123      164.819      V3-simple 
+2        96       12   2.008        1.985        V3-simple 
+2        96       13   11.850       11.638       V3-simple 
+2        96       14   96.102       95.839       V3-simple 
+4        48       12   0.215        0.228        V2-hyper  
+4        48       13   2.967        3.011        V2-hyper  
+4        48       14   37.119       37.031       V3-simple 
+8        24       12   0.055        0.054        V3-simple 
+8        24       13   0.935        0.935        V3-simple 
+8        24       14   13.179       13.180       V2-hyper  
+16       12       12   0.036        0.038        V2-hyper  
+16       12       13   0.672        0.672        V3-simple 
+16       12       14   9.727        9.720        V3-simple 
+
+==========================================
+Results saved to: results_mpi_v1v2v3_comparison.csv
+==========================================
+
+==========================================
+All MPI benchmarks completed!
+==========================================
+End time: Thu Jan  8 14:19:44 CET 2026
