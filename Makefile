@@ -50,7 +50,6 @@ SRCS_SEQ_V2 = $(SRC_DIR)/search_sequential_v2.cpp $(SRC_DIR)/main_sequential_v2.
 SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
 SRCS_MPI_V2 = $(SRC_DIR)/search_mpi_v2.cpp $(SRC_DIR)/main_mpi_v2.cpp
 SRCS_MPI_V3 = $(SRC_DIR)/search_mpi_v3.cpp $(SRC_DIR)/main_mpi_v3.cpp
-SRCS_MPI_V4 = $(SRC_DIR)/search_mpi_v4.cpp $(SRC_DIR)/main_mpi_v4.cpp
 SRCS_COMPARE = $(SRC_DIR)/search.cpp $(SRC_DIR)/search_v2.cpp $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_benchmark_compare.cpp
 
 # Objects
@@ -64,7 +63,6 @@ OBJS_SEQ_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq2_%.o,$(SRCS_SEQ_V2))
 OBJS_MPI    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi_%.o,$(SRCS_MPI))
 OBJS_MPI_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi2_%.o,$(SRCS_MPI_V2))
 OBJS_MPI_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi3_%.o,$(SRCS_MPI_V3))
-OBJS_MPI_V4 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi4_%.o,$(SRCS_MPI_V4))
 OBJS_COMPARE = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/cmp_%.o,$(SRCS_COMPARE))
 
 # Targets
@@ -78,7 +76,6 @@ TARGET_SEQ_V2 = $(BUILD_DIR)/golomb_sequential_v2
 TARGET_MPI    = $(BUILD_DIR)/golomb_mpi
 TARGET_MPI_V2 = $(BUILD_DIR)/golomb_mpi_v2
 TARGET_MPI_V3 = $(BUILD_DIR)/golomb_mpi_v3
-TARGET_MPI_V4 = $(BUILD_DIR)/golomb_mpi_v4
 TARGET_COMPARE = $(BUILD_DIR)/golomb_compare
 
 # Default target
@@ -185,15 +182,6 @@ $(TARGET_MPI_V3): $(OBJS_MPI_V3)
 $(BUILD_DIR)/mpi3_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(MPICXX) $(CXXFLAGS) -c -o $@ $<
 
-# MPI V4 target (greedy init + dynamic distribution)
-mpi_v4: $(BUILD_DIR) $(TARGET_MPI_V4)
-
-$(TARGET_MPI_V4): $(OBJS_MPI_V4)
-	$(MPICXX) $(LDFLAGS) -o $@ $^
-
-$(BUILD_DIR)/mpi4_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
-	$(MPICXX) $(CXXFLAGS) -c -o $@ $<
-
 # Compare V1 vs V2 benchmark target
 compare: $(BUILD_DIR) $(TARGET_COMPARE)
 
@@ -277,7 +265,7 @@ run-seq-dev: $(TARGET_SEQ_DEV)
 	./$(TARGET_SEQ_DEV)
 
 .PHONY: all sequential sequential_v2 sequential-dev openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5 \
-        mpi mpi_v2 mpi_v3 mpi_v4 openmp-dev mpi-dev clean \
+        mpi mpi_v2 mpi_v3 openmp-dev mpi-dev clean \
         run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2 \
         test bench run-seq run-seq-dev compare run-compare
 
