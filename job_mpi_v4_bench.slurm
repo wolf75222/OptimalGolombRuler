@@ -69,8 +69,12 @@ printf "%-4s %-8s %-12s %-8s %-10s\n" "n" "Version" "Time(s)" "Length" "Speedup"
 echo "------------------------------------------------"
 
 for n in 12 13 14; do
+    echo "Testing n=$n..."
+
     # V3
-    OUT3=$(srun --ntasks=8 --cpus-per-task=12 --cpu-bind=cores ./build/golomb_mpi_v3 $n 2>&1)
+    echo "  Running V3..."
+    OUT3=$(OMP_NUM_THREADS=12 srun --ntasks=8 --cpus-per-task=$SLURM_CPUS_PER_TASK --cpu-bind=cores --distribution=block:block ./build/golomb_mpi_v3 $n 2>&1) || true
+    echo "  V3 output: $OUT3" | head -5
     T3=$(parse_output "$OUT3" "Time")
     L3=$(parse_output "$OUT3" "Length")
     S3=$(parse_output "$OUT3" "States")
@@ -78,7 +82,9 @@ for n in 12 13 14; do
     printf "%-4s %-8s %-12s %-8s %-10s\n" "$n" "V3" "$T3" "$L3" "-"
 
     # V4
-    OUT4=$(srun --ntasks=8 --cpus-per-task=12 --cpu-bind=cores ./build/golomb_mpi_v4 $n 2>&1)
+    echo "  Running V4..."
+    OUT4=$(OMP_NUM_THREADS=12 srun --ntasks=8 --cpus-per-task=$SLURM_CPUS_PER_TASK --cpu-bind=cores --distribution=block:block ./build/golomb_mpi_v4 $n 2>&1) || true
+    echo "  V4 output: $OUT4" | head -5
     T4=$(parse_output "$OUT4" "Time")
     L4=$(parse_output "$OUT4" "Length")
     S4=$(parse_output "$OUT4" "States")
