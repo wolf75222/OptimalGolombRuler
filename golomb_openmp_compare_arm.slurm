@@ -2,32 +2,27 @@
 #SBATCH --account=r250127
 #SBATCH --partition=short
 #SBATCH --constraint=armgpu
-#SBATCH --time=0-02:00:00
+#SBATCH --time=0-04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=192
 #SBATCH --mem=0
 #SBATCH --exclusive
-#SBATCH --job-name=golomb_arm_v1v2v3v4v5
+#SBATCH --job-name=golomb_arm_v5
 #SBATCH --output=job_arm.%J.out
 #SBATCH --error=job_arm.%J.err
 
 # =============================================================================
-# Golomb Ruler OpenMP Comparison: V1 vs V2 vs V3 vs V4 vs V5 - ARM VERSION
+# Golomb Ruler OpenMP V5 Benchmark - ARM VERSION
 # =============================================================================
-# Compare les 5 versions OpenMP sur processeurs ARM:
-#   V1: Original (iterative + loop unrolling)
-#   V2: Bitset shift (recursive)
-#   V3: Hybrid (iterative + bitset shift)
-#   V4: Prefix-based + iterative + bitset shift
-#   V5: uint64_t ops + prefix-based
+# Benchmark V5 (uint64_t ops + prefix-based) sur processeurs ARM
 #
 # Architecture cible: romeo ARM nodes
 #   - constraint=armgpu force les noeuds ARM
 #
 # Tests:
 #   Threads: 8, 16, 32, 64, 96, 192
-#   Golomb n: 12, 13
+#   Golomb n: 12, 13, 14
 # =============================================================================
 
 set -euo pipefail
@@ -35,7 +30,7 @@ set -euo pipefail
 romeo_load_armgpu_env
 
 echo "=========================================="
-echo "Golomb Ruler OpenMP Comparison: V1-V5 (ARM)"
+echo "Golomb Ruler OpenMP V5 Benchmark (ARM)"
 echo "=========================================="
 echo "PWD at start: $(pwd)"
 echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR}"
@@ -60,11 +55,11 @@ cd "$WORK/OptimalGolombRuler"
 echo "Building in: $(pwd)"
 
 # =============================================================================
-# BUILD ALL VERSIONS
+# BUILD V5
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "Building all OpenMP versions (ARM)"
+echo "Building OpenMP V5 (ARM)"
 echo "=========================================="
 
 make clean 2>/dev/null || true
@@ -73,25 +68,21 @@ make clean 2>/dev/null || true
 ARCH_FLAGS="-march=native -mtune=native"
 echo "Using ARCH_FLAGS: $ARCH_FLAGS"
 
-# Build all versions avec flags natifs
-for ver in openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5; do
-    echo "Building $ver..."
-    make $ver CXX=g++ OPTFLAGS="-O3 $ARCH_FLAGS -funroll-loops -fomit-frame-pointer -flto"
-done
+# Build V5 only avec flags natifs
+echo "Building openmp_v5..."
+make openmp_v5 CXX=g++ OPTFLAGS="-O3 $ARCH_FLAGS -funroll-loops -fomit-frame-pointer -flto"
 
 echo ""
 echo "Contents of build/:"
 ls -lah build || true
 
-# Verifier les binaires
-for bin in golomb_openmp golomb_openmp_v2 golomb_openmp_v3 golomb_openmp_v4 golomb_openmp_v5; do
-    if [[ ! -x ./build/$bin ]]; then
-        echo "ERROR: ./build/$bin not found or not executable" >&2
-        exit 1
-    fi
-done
+# Verifier le binaire V5
+if [[ ! -x ./build/golomb_openmp_v5 ]]; then
+    echo "ERROR: ./build/golomb_openmp_v5 not found or not executable" >&2
+    exit 1
+fi
 
-echo "All binaries built successfully!"
+echo "V5 binary built successfully!"
 
 # =============================================================================
 # BENCHMARK CONFIGURATION
@@ -104,7 +95,7 @@ export OMP_PLACES=cores
 export OMP_STACKSIZE=16M
 
 # Output CSV file
-CSV_FILE="results_arm_v1v2v3v4v5_comparison.csv"
+CSV_FILE="results_arm_v5.csv"
 echo "threads,n,version,binding,time_s,length,states,states_per_sec" > "$CSV_FILE"
 
 # =============================================================================
@@ -146,56 +137,40 @@ for bind in "${BINDINGS[@]}"; do
     for t in "${THREADS[@]}"; do
         for n in "${GOLOMB_N[@]}"; do
 
-            # Run all 5 versions
-            for ver in V1 V2 V3 V4 V5; do
-                case $ver in
-                    V1) binary="./build/golomb_openmp" ;;
-                    V2) binary="./build/golomb_openmp_v2" ;;
-                    V3) binary="./build/golomb_openmp_v3" ;;
-                    V4) binary="./build/golomb_openmp_v4" ;;
-                    V5) binary="./build/golomb_openmp_v5" ;;
-                esac
+            # Run V5 only
+            binary="./build/golomb_openmp_v5"
+            output=$(run_bench "$binary" "$n" "$t")
+            time_val=$(parse_output "$output" "Time")
+            len_val=$(parse_output "$output" "Length")
+            states_val=$(parse_output "$output" "States")
+            sps_val=$(parse_output "$output" "States/sec")
 
-                output=$(run_bench "$binary" "$n" "$t")
-                time_val=$(parse_output "$output" "Time")
-                len_val=$(parse_output "$output" "Length")
-                states_val=$(parse_output "$output" "States")
-                sps_val=$(parse_output "$output" "States/sec")
-
-                printf "%-8s %-4s %-8s %-8s %-12s %-8s %-15s %-15s\n" \
-                    "$t" "$n" "$ver" "$bind" "$time_val" "$len_val" "$states_val" "$sps_val"
-                echo "$t,$n,$ver,$bind,$time_val,$len_val,$states_val,$sps_val" >> "$CSV_FILE"
-            done
+            printf "%-8s %-4s %-8s %-8s %-12s %-8s %-15s %-15s\n" \
+                "$t" "$n" "V5" "$bind" "$time_val" "$len_val" "$states_val" "$sps_val"
+            echo "$t,$n,V5,$bind,$time_val,$len_val,$states_val,$sps_val" >> "$CSV_FILE"
             echo ""
         done
     done
 done
 
 # =============================================================================
-# SUMMARY - Best V5 times per configuration
+# SUMMARY - V5 times per configuration
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "SUMMARY - V5 vs others (ARM, close binding)"
+echo "SUMMARY - V5 Results (ARM)"
 echo "=========================================="
 echo ""
 
-printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
-    "Threads" "n" "V1(s)" "V2(s)" "V3(s)" "V4(s)" "V5(s)" "V5/V1"
-echo "--------------------------------------------------------------------------"
+printf "%-8s %-4s %-12s %-15s\n" "Threads" "n" "Time(s)" "States/sec"
+echo "----------------------------------------------"
 
 for t in "${THREADS[@]}"; do
     for n in "${GOLOMB_N[@]}"; do
-        v1_time=$(grep "^$t,$n,V1,close," "$CSV_FILE" | cut -d',' -f5)
-        v2_time=$(grep "^$t,$n,V2,close," "$CSV_FILE" | cut -d',' -f5)
-        v3_time=$(grep "^$t,$n,V3,close," "$CSV_FILE" | cut -d',' -f5)
-        v4_time=$(grep "^$t,$n,V4,close," "$CSV_FILE" | cut -d',' -f5)
         v5_time=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f5)
-
-        if [[ -n "$v1_time" && -n "$v5_time" && "$v5_time" != "0" ]]; then
-            speedup_v1=$(echo "scale=2; $v1_time / $v5_time" | bc 2>/dev/null || echo "N/A")
-            printf "%-8s %-4s %-10s %-10s %-10s %-10s %-10s %-10s\n" \
-                "$t" "$n" "$v1_time" "$v2_time" "$v3_time" "$v4_time" "$v5_time" "${speedup_v1}x"
+        v5_sps=$(grep "^$t,$n,V5,close," "$CSV_FILE" | cut -d',' -f8)
+        if [[ -n "$v5_time" ]]; then
+            printf "%-8s %-4s %-12s %-15s\n" "$t" "$n" "$v5_time" "$v5_sps"
         fi
     done
 done
@@ -270,6 +245,6 @@ cp "$CSV_FILE" "$SLURM_SUBMIT_DIR/"
 
 echo ""
 echo "=========================================="
-echo "All ARM benchmarks completed!"
+echo "ARM V5 benchmarks completed!"
 echo "=========================================="
 echo "End time: $(date)"

@@ -2,7 +2,7 @@
 #SBATCH --account=r250127
 #SBATCH --partition=short
 #SBATCH --constraint=x64cpu
-#SBATCH --time=0-02:00:00
+#SBATCH --time=0-04:00:00
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=24
@@ -34,6 +34,7 @@
 set -euo pipefail
 
 romeo_load_x64cpu_env
+spack load openmpi@4.1.7 %aocc
 
 echo "=========================================="
 echo "Golomb Ruler MPI Comparison: V1-V3"

@@ -50,7 +50,19 @@
       "Bash(powershell.exe -Command \"cd ''c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler''; .\\\\scripts\\\\build_openmp_v6.bat\")",
       "Bash(powershell.exe:*)",
       "Bash(scriptsbuild_sequential_v2.bat dev)",
-      "Bash(pdflatex:*)"
+      "Bash(pdflatex:*)",
+      "Bash(biber:*)",
+      "Bash(lualatex:*)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler\\\\rapport\\\\build\\\\*.aux\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler\\\\rapport\\\\build\\\\*.bbl\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler\\\\rapport\\\\build\\\\*.bcf\" -ErrorAction SilentlyContinue)",
+      "Bash(file:*)",
+      "Bash(grep:*)",
+      "Bash(xelatex:*)",
+      "Bash(mpm --update-db)",
+      "Bash(mpm --update)",
+      "Bash(dir /b)",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\romai\\\\dev\\\\golomb\\\\OptimalGolombRuler\\\\rapport\\\\build\")"
     ],
     "deny": [],
     "ask": []

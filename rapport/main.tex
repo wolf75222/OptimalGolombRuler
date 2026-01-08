@@ -3,15 +3,20 @@
 % Citation en début de chapitre
 \usepackage{epigraph}
 
-% Encodages et langue
-\usepackage[utf8]{inputenc} % Encodage UTF-8
-\usepackage[T1]{fontenc}
-\usepackage[french]{babel}    % Langue du document
-\usepackage{csquotes}          % Requis pour biblatex avec babel
+% Encodages et langue (XeLaTeX/LuaLaTeX natif UTF-8)
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+\else
+  \usepackage{fontspec}
+\fi
+\usepackage[french]{babel}
+\usepackage{csquotes}
 
-\usepackage{biblatex}
+\usepackage[backend=biber]{biblatex}
 \addbibresource{references.bib}
-\usepackage{libertine}         % Added for Libertine font
+\usepackage{libertine}
 \usepackage{setspace}          % Added for \setstretch
 \usepackage{tabularx}
 
