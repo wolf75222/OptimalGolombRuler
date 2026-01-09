@@ -47,6 +47,8 @@ SRCS_OPENMP_V3 = $(SRC_DIR)/search_v3.cpp $(SRC_DIR)/main_openmp_v3.cpp
 SRCS_OPENMP_V4 = $(SRC_DIR)/search_v4.cpp $(SRC_DIR)/main_openmp_v4.cpp
 SRCS_OPENMP_V5 = $(SRC_DIR)/search_v5.cpp $(SRC_DIR)/main_openmp_v5.cpp
 SRCS_SEQ_V2 = $(SRC_DIR)/search_sequential_v2.cpp $(SRC_DIR)/main_sequential_v2.cpp
+SRCS_SEQ_V3 = $(SRC_DIR)/search_sequential_v3.cpp $(SRC_DIR)/main_sequential_v3.cpp
+SRCS_SEQ_V4 = $(SRC_DIR)/search_sequential_v4.cpp $(SRC_DIR)/main_sequential_v4.cpp
 SRCS_MPI    = $(SRC_DIR)/search_mpi.cpp $(SRC_DIR)/main_mpi.cpp
 SRCS_MPI_V2 = $(SRC_DIR)/search_mpi_v2.cpp $(SRC_DIR)/main_mpi_v2.cpp
 SRCS_MPI_V3 = $(SRC_DIR)/search_mpi_v3.cpp $(SRC_DIR)/main_mpi_v3.cpp
@@ -60,6 +62,8 @@ OBJS_OPENMP_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v3_%.o,$(SRCS_OPENMP_V
 OBJS_OPENMP_V4 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v4_%.o,$(SRCS_OPENMP_V4))
 OBJS_OPENMP_V5 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/v5_%.o,$(SRCS_OPENMP_V5))
 OBJS_SEQ_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq2_%.o,$(SRCS_SEQ_V2))
+OBJS_SEQ_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq3_%.o,$(SRCS_SEQ_V3))
+OBJS_SEQ_V4 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/seq4_%.o,$(SRCS_SEQ_V4))
 OBJS_MPI    = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi_%.o,$(SRCS_MPI))
 OBJS_MPI_V2 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi2_%.o,$(SRCS_MPI_V2))
 OBJS_MPI_V3 = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/mpi3_%.o,$(SRCS_MPI_V3))
@@ -73,6 +77,8 @@ TARGET_OPENMP_V3 = $(BUILD_DIR)/golomb_openmp_v3
 TARGET_OPENMP_V4 = $(BUILD_DIR)/golomb_openmp_v4
 TARGET_OPENMP_V5 = $(BUILD_DIR)/golomb_openmp_v5
 TARGET_SEQ_V2 = $(BUILD_DIR)/golomb_sequential_v2
+TARGET_SEQ_V3 = $(BUILD_DIR)/golomb_sequential_v3
+TARGET_SEQ_V4 = $(BUILD_DIR)/golomb_sequential_v4
 TARGET_MPI    = $(BUILD_DIR)/golomb_mpi
 TARGET_MPI_V2 = $(BUILD_DIR)/golomb_mpi_v2
 TARGET_MPI_V3 = $(BUILD_DIR)/golomb_mpi_v3
@@ -153,6 +159,24 @@ $(TARGET_SEQ_V2): $(OBJS_SEQ_V2)
 	$(CXX) $(LDFLAGS_SEQ) -o $@ $^
 
 $(BUILD_DIR)/seq2_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS_SEQ) -c -o $@ $<
+
+# Sequential V3 target (SIMD SSE2 optimized)
+sequential_v3: $(BUILD_DIR) $(TARGET_SEQ_V3)
+
+$(TARGET_SEQ_V3): $(OBJS_SEQ_V3)
+	$(CXX) $(LDFLAGS_SEQ) -msse4.1 -o $@ $^
+
+$(BUILD_DIR)/seq3_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS_SEQ) -msse4.1 -c -o $@ $<
+
+# Sequential V4 target (maximum pruning + all optimizations)
+sequential_v4: $(BUILD_DIR) $(TARGET_SEQ_V4)
+
+$(TARGET_SEQ_V4): $(OBJS_SEQ_V4)
+	$(CXX) $(LDFLAGS_SEQ) -o $@ $^
+
+$(BUILD_DIR)/seq4_%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS_SEQ) -c -o $@ $<
 
 # MPI target (V1 - original with hypercube)
@@ -264,7 +288,7 @@ run-seq: $(TARGET_SEQ)
 run-seq-dev: $(TARGET_SEQ_DEV)
 	./$(TARGET_SEQ_DEV)
 
-.PHONY: all sequential sequential_v2 sequential-dev openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5 \
+.PHONY: all sequential sequential_v2 sequential_v3 sequential_v4 sequential-dev openmp openmp_v2 openmp_v3 openmp_v4 openmp_v5 \
         mpi mpi_v2 mpi_v3 openmp-dev mpi-dev clean \
         run run-dev run_mpi_2 run_mpi_4 run_mpi_8 run_mpi_dev_2 \
         test bench run-seq run-seq-dev compare run-compare
